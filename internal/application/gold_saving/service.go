@@ -81,7 +81,7 @@ func (s *Service) Deposit(ctx context.Context, accountID primitive.ObjectID, amo
 		return nil, errors.New("failed to get current gold price")
 	}
 
-	if err := account.Deposit(amount, goldPrice.GoldOrnamentSell, userID); err != nil {
+	if err := account.Deposit(amount, goldPrice.GoldBarSell, userID); err != nil {
 		return nil, err
 	}
 

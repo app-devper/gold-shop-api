@@ -1,6 +1,7 @@
 package entity
 
 import (
+	"math"
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -10,8 +11,8 @@ import (
 type GoldSavingType string
 
 const (
-	GoldSavingByMoney  GoldSavingType = "by_money"
-	GoldSavingByWeight GoldSavingType = "by_weight"
+	GoldSavingByMoney  GoldSavingType = "money"
+	GoldSavingByWeight GoldSavingType = "weight"
 )
 
 // GoldSavingStatus represents the status of a gold saving account
@@ -86,7 +87,7 @@ func (gs *GoldSaving) Deposit(amount, goldPrice float64, processedBy primitive.O
 
 	if gs.SavingType == GoldSavingByMoney {
 		// Calculate gold weight based on current price
-		goldWeight = amount / goldPrice
+		goldWeight = math.Round((amount/goldPrice*15.2)*100) / 100
 		gs.GoldBalance += goldWeight
 		gs.CashBalance += amount
 	} else {
