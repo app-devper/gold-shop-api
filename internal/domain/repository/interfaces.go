@@ -66,6 +66,24 @@ type ProductRepository interface {
 	Count(ctx context.Context, branchID primitive.ObjectID) (int64, error)
 }
 
+// ProductItemRepository defines individual item data operations
+type ProductItemRepository interface {
+	Create(ctx context.Context, item *entity.ProductItem) error
+	GetByID(ctx context.Context, id primitive.ObjectID) (*entity.ProductItem, error)
+	GetByBarcode(ctx context.Context, barcode string) (*entity.ProductItem, error)
+	GetByProductID(ctx context.Context, productID primitive.ObjectID, status []entity.ProductStatus) ([]*entity.ProductItem, error)
+	GetByBranchID(ctx context.Context, branchID primitive.ObjectID, status []entity.ProductStatus) ([]*entity.ProductItem, error)
+	Update(ctx context.Context, item *entity.ProductItem) error
+	Delete(ctx context.Context, id primitive.ObjectID) error
+}
+
+// StockLogRepository defines stock log operations
+type StockLogRepository interface {
+	Create(ctx context.Context, log *entity.StockLog) error
+	GetByProductID(ctx context.Context, productID primitive.ObjectID) ([]*entity.StockLog, error)
+	GetByBranchID(ctx context.Context, branchID primitive.ObjectID, limit, offset int) ([]*entity.StockLog, error)
+}
+
 // GoldPriceRepository defines gold price data operations
 type GoldPriceRepository interface {
 	Create(ctx context.Context, price *entity.GoldPrice) error

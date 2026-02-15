@@ -71,6 +71,8 @@ func main() {
 	goldSavingRepo := mongo.NewGoldSavingRepository(mongoClient)
 
 	productCategoryRepo := mongo.NewProductCategoryRepository(mongoClient)
+	productItemRepo := mongo.NewProductItemRepository(mongoClient)
+	stockLogRepo := mongo.NewStockLogRepository(mongoClient)
 	expenseCategoryRepo := mongo.NewExpenseCategoryRepository(mongoClient)
 	expenseRepo := mongo.NewExpenseRepository(mongoClient)
 	inventoryRepo := mongo.NewInventoryTransferRepository(mongoClient)
@@ -92,14 +94,14 @@ func main() {
 	// Initialize services
 	authService := auth.NewService(userRepo, jwtManager)
 	branchService := branch.NewService(branchRepo)
-	saleService := sale.NewService(saleRepo, productRepo, customerRepo, branchRepo, userRepo)
+	saleService := sale.NewService(saleRepo, productRepo, productItemRepo, goldPriceRepo, stockLogRepo, customerRepo, branchRepo, userRepo)
 	pawnService := pawn.NewService(pawnRepo, branchRepo)
 	goldPriceService := gold_price_app.NewService(goldPriceRepo, goldAPIClient)
 	goldSavingService := gold_saving.NewService(goldSavingRepo, goldPriceRepo, branchRepo)
 	// Suppress unused variables until their services are implemented
 
 	userService := user.NewService(userRepo, branchRepo)
-	productService := product.NewService(productRepo, productCategoryRepo, branchRepo)
+	productService := product.NewService(productRepo, productItemRepo, stockLogRepo, productCategoryRepo, branchRepo)
 	customerService := customer.NewService(customerRepo)
 	inventoryService := inventory.NewService(inventoryRepo, productRepo, branchRepo)
 	rewardService := reward.NewService(rewardRepo, redemptionRepo, customerRepo)

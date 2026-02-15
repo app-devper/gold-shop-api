@@ -459,3 +459,67 @@ func (m *MockGoldPriceRepository) DeactivateAll(ctx context.Context) error {
 	args := m.Called(ctx)
 	return args.Error(0)
 }
+
+type MockProductItemRepository struct {
+	mock.Mock
+}
+
+func (m *MockProductItemRepository) Create(ctx context.Context, item *entity.ProductItem) error {
+	args := m.Called(ctx, item)
+	return args.Error(0)
+}
+
+func (m *MockProductItemRepository) GetByID(ctx context.Context, id primitive.ObjectID) (*entity.ProductItem, error) {
+	args := m.Called(ctx, id)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*entity.ProductItem), args.Error(1)
+}
+
+func (m *MockProductItemRepository) GetByBarcode(ctx context.Context, barcode string) (*entity.ProductItem, error) {
+	args := m.Called(ctx, barcode)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*entity.ProductItem), args.Error(1)
+}
+
+func (m *MockProductItemRepository) GetByProductID(ctx context.Context, productID primitive.ObjectID, status []entity.ProductStatus) ([]*entity.ProductItem, error) {
+	args := m.Called(ctx, productID, status)
+	return args.Get(0).([]*entity.ProductItem), args.Error(1)
+}
+
+func (m *MockProductItemRepository) GetByBranchID(ctx context.Context, branchID primitive.ObjectID, status []entity.ProductStatus) ([]*entity.ProductItem, error) {
+	args := m.Called(ctx, branchID, status)
+	return args.Get(0).([]*entity.ProductItem), args.Error(1)
+}
+
+func (m *MockProductItemRepository) Update(ctx context.Context, item *entity.ProductItem) error {
+	args := m.Called(ctx, item)
+	return args.Error(0)
+}
+
+func (m *MockProductItemRepository) Delete(ctx context.Context, id primitive.ObjectID) error {
+	args := m.Called(ctx, id)
+	return args.Error(0)
+}
+
+type MockStockLogRepository struct {
+	mock.Mock
+}
+
+func (m *MockStockLogRepository) Create(ctx context.Context, log *entity.StockLog) error {
+	args := m.Called(ctx, log)
+	return args.Error(0)
+}
+
+func (m *MockStockLogRepository) GetByProductID(ctx context.Context, productID primitive.ObjectID) ([]*entity.StockLog, error) {
+	args := m.Called(ctx, productID)
+	return args.Get(0).([]*entity.StockLog), args.Error(1)
+}
+
+func (m *MockStockLogRepository) GetByBranchID(ctx context.Context, branchID primitive.ObjectID, limit, offset int) ([]*entity.StockLog, error) {
+	args := m.Called(ctx, branchID, limit, offset)
+	return args.Get(0).([]*entity.StockLog), args.Error(1)
+}

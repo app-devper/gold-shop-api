@@ -11,33 +11,35 @@ import (
 
 // CreateProductRequest represents data for creating a product
 type CreateProductRequest struct {
-	BranchID   string               `json:"branch_id" binding:"required"`
-	CategoryID string               `json:"category_id" binding:"required"`
-	SKU        string               `json:"sku" binding:"required"`
-	Name       string               `json:"name" binding:"required"`
-	GoldType   string               `json:"gold_type" binding:"required"`
-	Weight     float64              `json:"weight" binding:"required"`
-	LaborCost  float64              `json:"labor_cost"`
-	Cost       float64              `json:"cost"`
-	Prices     entity.ProductPrices `json:"prices"`
-	Barcode    string               `json:"barcode"`
+	BranchID   string           `json:"branch_id" binding:"required"`
+	CategoryID string           `json:"category_id" binding:"required"`
+	SKU        string           `json:"sku" binding:"required"`
+	Name       string           `json:"name" binding:"required"`
+	StockType  entity.StockType `json:"stock_type" binding:"required"`
+	GoldType   string           `json:"gold_type" binding:"required"`
+	Weight     float64          `json:"weight" binding:"required"`
+	LaborCost  float64          `json:"labor_cost"`
+	Cost       float64          `json:"cost"`
+	Barcode    string           `json:"barcode"`
 }
 
 // UpdateProductRequest represents data for updating a product
 type UpdateProductRequest struct {
-	Name      string                `json:"name"`
-	GoldType  string                `json:"gold_type"`
-	Weight    float64               `json:"weight"`
-	LaborCost float64               `json:"labor_cost"`
-	Cost      float64               `json:"cost"`
-	Prices    *entity.ProductPrices `json:"prices"`
-	Barcode   string                `json:"barcode"`
-	Status    string                `json:"status"`
+	Name      string  `json:"name"`
+	GoldType  string  `json:"gold_type"`
+	Weight    float64 `json:"weight"`
+	LaborCost float64 `json:"labor_cost"`
+	Cost      float64 `json:"cost"`
+	Price     float64 `json:"price"`
+	Barcode   string  `json:"barcode"`
+	Status    string  `json:"status"`
 }
 
 // Service handles product business logic
 type Service struct {
 	productRepo  repository.ProductRepository
+	itemRepo     repository.ProductItemRepository
+	stockLogRepo repository.StockLogRepository
 	categoryRepo repository.ProductCategoryRepository
 	branchRepo   repository.BranchRepository
 }
@@ -45,11 +47,15 @@ type Service struct {
 // NewService creates a new product service
 func NewService(
 	productRepo repository.ProductRepository,
+	itemRepo repository.ProductItemRepository,
+	stockLogRepo repository.StockLogRepository,
 	categoryRepo repository.ProductCategoryRepository,
 	branchRepo repository.BranchRepository,
 ) *Service {
 	return &Service{
 		productRepo:  productRepo,
+		itemRepo:     itemRepo,
+		stockLogRepo: stockLogRepo,
 		categoryRepo: categoryRepo,
 		branchRepo:   branchRepo,
 	}
@@ -81,9 +87,8 @@ func (s *Service) CreateProduct(ctx context.Context, req *CreateProductRequest) 
 		return nil, errors.New("SKU already exists")
 	}
 
-	product := entity.NewProduct(branchID, categoryID, req.SKU, req.Name, req.GoldType, req.Weight, req.LaborCost)
+	product := entity.NewProduct(branchID, categoryID, req.SKU, req.Name, req.GoldType, req.StockType, req.Weight, req.LaborCost)
 	product.Cost = req.Cost
-	product.Prices = req.Prices
 	product.Barcode = req.Barcode
 
 	if err := s.productRepo.Create(ctx, product); err != nil {
@@ -100,7 +105,17 @@ func (s *Service) GetProduct(ctx context.Context, id string) (*entity.Product, e
 		return nil, errors.New("invalid product ID")
 	}
 
-	return s.productRepo.GetByID(ctx, productID)
+	product, err := s.productRepo.GetByID(ctx, productID)
+	if err != nil || product == nil {
+		return product, err
+	}
+
+	if product.StockType == entity.StockTypePiece {
+		items, _ := s.itemRepo.GetByProductID(ctx, product.ID, []entity.ProductStatus{entity.ProductStatusAvailable})
+		product.Items = items
+	}
+
+	return product, nil
 }
 
 // GetProducts retrieves products with filtering
@@ -115,7 +130,19 @@ func (s *Service) GetProducts(ctx context.Context, branchID string, status strin
 		statuses = []entity.ProductStatus{entity.ProductStatus(status)}
 	}
 
-	return s.productRepo.GetByBranchID(ctx, bID, statuses, limit, offset)
+	products, err := s.productRepo.GetByBranchID(ctx, bID, statuses, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, p := range products {
+		if p.StockType == entity.StockTypePiece {
+			items, _ := s.itemRepo.GetByProductID(ctx, p.ID, []entity.ProductStatus{entity.ProductStatusAvailable})
+			p.Items = items
+		}
+	}
+
+	return products, nil
 }
 
 // UpdateProduct updates a product
@@ -146,9 +173,7 @@ func (s *Service) UpdateProduct(ctx context.Context, id string, req *UpdateProdu
 	product.LaborCost = req.LaborCost
 	product.Cost = req.Cost
 
-	if req.Prices != nil {
-		product.Prices = *req.Prices
-	}
+	product.Price = req.Price
 	if req.Barcode != "" {
 		product.Barcode = req.Barcode
 	}

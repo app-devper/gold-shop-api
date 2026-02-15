@@ -37,10 +37,13 @@ type CreateSaleRequest struct {
 
 // SaleItemRequest represents a sale item in request
 type SaleItemRequest struct {
-	ProductID    string  `json:"product_id" binding:"required"`
-	PriceLevel   string  `json:"price_level"`
-	Discount     float64 `json:"discount"`
-	DiscountType string  `json:"discount_type"`
+	ProductID     string   `json:"product_id" binding:"required"`
+	ProductItemID string   `json:"product_item_id"`
+	PriceLevel    string   `json:"price_level"`
+	Price         *float64 `json:"price,omitempty"`
+	Weight        float64  `json:"weight"`
+	Discount      float64  `json:"discount"`
+	DiscountType  string   `json:"discount_type"`
 }
 
 // OldGoldRequest represents old gold in request
@@ -128,10 +131,13 @@ func (h *SaleHandler) Create(c *gin.Context) {
 	// Convert items
 	for _, item := range req.Items {
 		input.Items = append(input.Items, sale.SaleItemInput{
-			ProductID:    item.ProductID,
-			PriceLevel:   item.PriceLevel,
-			Discount:     item.Discount,
-			DiscountType: entity.DiscountType(item.DiscountType),
+			ProductID:     item.ProductID,
+			ProductItemID: item.ProductItemID,
+			PriceLevel:    item.PriceLevel,
+			Price:         item.Price,
+			Weight:        item.Weight,
+			Discount:      item.Discount,
+			DiscountType:  entity.DiscountType(item.DiscountType),
 		})
 	}
 

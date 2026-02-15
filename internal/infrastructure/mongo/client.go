@@ -67,4 +67,6 @@ const (
 	CollectionInventoryTransfers = "inventory_transfers"
 	CollectionRewards            = "rewards"
 	CollectionRewardRedemptions  = "reward_redemptions"
+	CollectionProductItems       = "product_items"
+	CollectionStockLogs          = "stock_logs"
 )

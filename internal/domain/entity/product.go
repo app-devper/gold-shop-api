@@ -16,13 +16,13 @@ const (
 	ProductStatusPawned    ProductStatus = "pawned"
 )
 
-// ProductPrices contains tiered pricing for products
-type ProductPrices struct {
-	LevelA float64 `json:"level_a" bson:"level_a"`
-	LevelB float64 `json:"level_b" bson:"level_b"`
-	LevelC float64 `json:"level_c" bson:"level_c"`
-	LevelD float64 `json:"level_d" bson:"level_d"`
-}
+// StockType represents how a product's stock is counted
+type StockType string
+
+const (
+	StockTypePiece  StockType = "piece"
+	StockTypeWeight StockType = "weight"
+)
 
 // ProductCategory represents a product category
 type ProductCategory struct {
@@ -44,27 +44,30 @@ type Product struct {
 	Barcode      string             `json:"barcode,omitempty" bson:"barcode,omitempty"`
 	Name         string             `json:"name" bson:"name"`
 	Description  string             `json:"description" bson:"description"`
+	StockType    StockType          `json:"stock_type" bson:"stock_type"`
 	GoldType     string             `json:"gold_type" bson:"gold_type"`     // 96.5%, 99.99%
 	Weight       float64            `json:"weight" bson:"weight"`           // grams
 	WeightUnit   string             `json:"weight_unit" bson:"weight_unit"` // baht, gram
 	LaborCost    float64            `json:"labor_cost" bson:"labor_cost"`   // ค่ากำเหน็จ
-	Prices       ProductPrices      `json:"prices" bson:"prices"`
+	Price        float64            `json:"price" bson:"price"`
 	Cost         float64            `json:"cost" bson:"cost"`
 	Status       ProductStatus      `json:"status" bson:"status"`
 	Images       []string           `json:"images" bson:"images"`
 	ReorderPoint int                `json:"reorder_point" bson:"reorder_point"`
+	Items        []*ProductItem     `json:"items,omitempty" bson:"-"` // Not stored in product collection
 	CreatedAt    time.Time          `json:"created_at" bson:"created_at"`
 	UpdatedAt    time.Time          `json:"updated_at" bson:"updated_at"`
 }
 
 // NewProduct creates a new Product entity
-func NewProduct(branchID, categoryID primitive.ObjectID, sku, name, goldType string, weight, laborCost float64) *Product {
+func NewProduct(branchID, categoryID primitive.ObjectID, sku, name, goldType string, stockType StockType, weight, laborCost float64) *Product {
 	now := time.Now()
 	return &Product{
 		BranchID:   branchID,
 		CategoryID: categoryID,
 		SKU:        sku,
 		Name:       name,
+		StockType:  stockType,
 		GoldType:   goldType,
 		Weight:     weight,
 		WeightUnit: "gram",
@@ -76,23 +79,12 @@ func NewProduct(branchID, categoryID primitive.ObjectID, sku, name, goldType str
 	}
 }
 
-// GetPriceByLevel returns price for the specified level
-func (p *Product) GetPriceByLevel(level string) float64 {
-	switch level {
-	case "A":
-		return p.Prices.LevelA
-	case "B":
-		return p.Prices.LevelB
-	case "C":
-		return p.Prices.LevelC
-	case "D":
-		return p.Prices.LevelD
-	default:
-		return p.Prices.LevelA
-	}
+// GetPrice returns the product price
+func (p *Product) GetPrice() float64 {
+	return p.Price
 }
 
 // CalculateTotalPrice calculates total price including labor cost
-func (p *Product) CalculateTotalPrice(level string) float64 {
-	return p.GetPriceByLevel(level) + p.LaborCost
+func (p *Product) CalculateTotalPrice() float64 {
+	return p.Price + p.LaborCost
 }

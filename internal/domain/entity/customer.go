@@ -35,6 +35,7 @@ type Customer struct {
 	Address    string             `json:"address,omitempty" bson:"address,omitempty"`
 	IsMember   bool               `json:"is_member" bson:"is_member"`
 	Membership *Membership        `json:"membership,omitempty" bson:"membership,omitempty"`
+	TotalSpent float64            `json:"total_spent" bson:"total_spent"`
 	CreatedAt  time.Time          `json:"created_at" bson:"created_at"`
 	UpdatedAt  time.Time          `json:"updated_at" bson:"updated_at"`
 }
@@ -43,11 +44,12 @@ type Customer struct {
 func NewCustomer(fullName, phone string, isMember bool) *Customer {
 	now := time.Now()
 	customer := &Customer{
-		FullName:  fullName,
-		Phone:     phone,
-		IsMember:  isMember,
-		CreatedAt: now,
-		UpdatedAt: now,
+		FullName:   fullName,
+		Phone:      phone,
+		IsMember:   isMember,
+		TotalSpent: 0,
+		CreatedAt:  now,
+		UpdatedAt:  now,
 	}
 
 	if isMember {

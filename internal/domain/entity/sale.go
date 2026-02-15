@@ -44,17 +44,18 @@ const (
 
 // SaleItem represents an item in a sale
 type SaleItem struct {
-	ProductID    primitive.ObjectID `json:"product_id" bson:"product_id"`
-	ProductName  string             `json:"product_name" bson:"product_name"`
-	GoldType     string             `json:"gold_type" bson:"gold_type"`
-	Weight       float64            `json:"weight" bson:"weight"`
-	PriceLevel   string             `json:"price_level" bson:"price_level"`
-	UnitPrice    float64            `json:"unit_price" bson:"unit_price"`
-	LaborCost    float64            `json:"labor_cost" bson:"labor_cost"`
-	Discount     float64            `json:"discount" bson:"discount"`
-	DiscountType DiscountType       `json:"discount_type" bson:"discount_type"`
-	Cost         float64            `json:"cost" bson:"cost"`
-	Total        float64            `json:"total" bson:"total"`
+	ProductID     primitive.ObjectID  `json:"product_id" bson:"product_id"`
+	ProductItemID *primitive.ObjectID `json:"product_item_id,omitempty" bson:"product_item_id,omitempty"`
+	ProductName   string              `json:"product_name" bson:"product_name"`
+	GoldType      string              `json:"gold_type" bson:"gold_type"`
+	Weight        float64             `json:"weight" bson:"weight"`
+	PriceLevel    string              `json:"price_level" bson:"price_level"`
+	UnitPrice     float64             `json:"unit_price" bson:"unit_price"`
+	LaborCost     float64             `json:"labor_cost" bson:"labor_cost"`
+	Discount      float64             `json:"discount" bson:"discount"`
+	DiscountType  DiscountType        `json:"discount_type" bson:"discount_type"`
+	Cost          float64             `json:"cost" bson:"cost"`
+	Total         float64             `json:"total" bson:"total"`
 }
 
 // OldGoldItem represents old gold being traded in
