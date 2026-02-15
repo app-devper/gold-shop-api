@@ -85,7 +85,26 @@ type PaymentInput struct {
 	Reference string
 }
 
-// Create creates a new sale
+// resolvedItem holds validated data for a single sale line item (Phase 1 output)
+type resolvedItem struct {
+	saleItem      entity.SaleItem
+	product       *entity.Product
+	productItem   *entity.ProductItem // non-nil for piece-based
+	productItemID *primitive.ObjectID
+	weight        float64
+}
+
+// calculateGramPrice returns the per-gram sell price based on the product's gold type
+func calculateGramPrice(goldPrice *entity.GoldPrice, product *entity.Product) float64 {
+	if product.IsBarGold() {
+		return goldPrice.GoldBarSell / entity.BahtPerGramBar
+	}
+	return goldPrice.GoldOrnamentSell / entity.BahtPerGramOrnament
+}
+
+// Create creates a new sale using a two-phase approach:
+// Phase 1: Validate all inputs and build sale items (no DB mutations)
+// Phase 2: Apply all DB mutations (stock updates, stock logs, customer updates)
 func (s *Service) Create(ctx context.Context, input CreateSaleInput) (*entity.Sale, error) {
 	// Get branch for sale number generation
 	branch, err := s.branchRepo.GetByID(ctx, input.BranchID)
@@ -120,7 +139,9 @@ func (s *Service) Create(ctx context.Context, input CreateSaleInput) (*entity.Sa
 		return nil, errors.New("could not fetch current gold price")
 	}
 
-	// Process items
+	// ── Phase 1: Validate all items (no DB writes) ──
+	resolved := make([]resolvedItem, 0, len(input.Items))
+
 	for _, itemInput := range input.Items {
 		productID, err := primitive.ObjectIDFromHex(itemInput.ProductID)
 		if err != nil {
@@ -132,17 +153,23 @@ func (s *Service) Create(ctx context.Context, input CreateSaleInput) (*entity.Sa
 			return nil, errors.New("product not found")
 		}
 
-		// Validation
 		if product.BranchID != input.BranchID {
 			return nil, errors.New("product does not belong to this branch")
+		}
+
+		if product.Status != entity.ProductStatusAvailable {
+			return nil, errors.New("product is not available for sale")
 		}
 
 		var unitPrice float64
 		var laborCost float64
 		var weight float64
 		var productItemID *primitive.ObjectID
+		var productItem *entity.ProductItem
 
-		if product.StockType == entity.StockTypePiece {
+		stockType := product.DefaultStockType()
+
+		if stockType == entity.StockTypePiece {
 			if itemInput.ProductItemID == "" {
 				return nil, errors.New("product item ID is required for piece-based products")
 			}
@@ -152,29 +179,22 @@ func (s *Service) Create(ctx context.Context, input CreateSaleInput) (*entity.Sa
 			}
 			productItemID = &itemID
 
-			item, err := s.itemRepo.GetByID(ctx, itemID)
-			if err != nil || item == nil {
+			productItem, err = s.itemRepo.GetByID(ctx, itemID)
+			if err != nil || productItem == nil {
 				return nil, errors.New("product item not found")
 			}
-			if item.ProductID != productID {
+			if productItem.ProductID != productID {
 				return nil, errors.New("item does not belong to the selected product")
 			}
-			if item.Status != entity.ProductStatusAvailable {
+			if productItem.Status != entity.ProductStatusAvailable {
 				return nil, errors.New("item is not available")
 			}
 
-			weight = item.Weight
-			laborCost = item.LaborCost
+			weight = productItem.Weight
+			laborCost = productItem.LaborCost
 
-			// Calculate dynamic price: (GoldOrnamentSell / 15.16) * weight
-			gramPrice := goldPrice.GoldOrnamentSell / 15.16
+			gramPrice := calculateGramPrice(goldPrice, product)
 			unitPrice = gramPrice * weight
-
-			// Update item status
-			item.Status = entity.ProductStatusSold
-			if err := s.itemRepo.Update(ctx, item); err != nil {
-				return nil, errors.New("failed to update item status")
-			}
 		} else {
 			// Weight-based
 			if itemInput.Weight <= 0 {
@@ -185,17 +205,10 @@ func (s *Service) Create(ctx context.Context, input CreateSaleInput) (*entity.Sa
 			}
 
 			weight = itemInput.Weight
-			laborCost = product.LaborCost // For weight-based, labor cost might be per item or per gram? Assume per gram if it's large, or per piece. Using as is.
+			laborCost = product.LaborCost
 
-			// Calculate dynamic price: (GoldBarSell / 15.244) * weight
-			gramPrice := goldPrice.GoldBarSell / 15.244
+			gramPrice := calculateGramPrice(goldPrice, product)
 			unitPrice = gramPrice * weight
-
-			// Update product weight (stock)
-			product.Weight -= weight
-			if err := s.productRepo.Update(ctx, product); err != nil {
-				return nil, errors.New("failed to update product stock")
-			}
 		}
 
 		// Use manual price if provided (overwrites dynamic price)
@@ -229,13 +242,13 @@ func (s *Service) Create(ctx context.Context, input CreateSaleInput) (*entity.Sa
 			Total:         total,
 		}
 
-		sale.AddItem(saleItem)
-
-		// Record Stock Log
-		stockLog := entity.NewStockLog(input.BranchID, productID, input.UserID, entity.StockActionSale, weight)
-		stockLog.ProductItemID = productItemID
-		stockLog.ReferenceID = saleNumber
-		s.stockLogRepo.Create(ctx, stockLog)
+		resolved = append(resolved, resolvedItem{
+			saleItem:      saleItem,
+			product:       product,
+			productItem:   productItem,
+			productItemID: productItemID,
+			weight:        weight,
+		})
 	}
 
 	// Process old gold items (for buy_old or exchange)
@@ -260,26 +273,73 @@ func (s *Service) Create(ctx context.Context, input CreateSaleInput) (*entity.Sa
 		sale.AddPayment(payment)
 	}
 
+	// Add validated items to sale (builds totals)
+	for _, r := range resolved {
+		sale.AddItem(r.saleItem)
+	}
+
 	// Calculate points earned (1 point per 100 baht)
 	sale.PointsEarned = int(sale.NetTotal / 100)
+
+	// Validate customer points before any mutations
+	if sale.CustomerID != nil && sale.PointsUsed > 0 {
+		customer, err := s.customerRepo.GetByID(ctx, *sale.CustomerID)
+		if err != nil {
+			return nil, errors.New("customer not found")
+		}
+		if !customer.IsMember || customer.Membership == nil || customer.Membership.Points < sale.PointsUsed {
+			return nil, errors.New("insufficient points")
+		}
+	}
+
+	// ── Phase 2: Apply all DB mutations ──
+	for _, r := range resolved {
+		stockType := r.product.DefaultStockType()
+
+		if stockType == entity.StockTypePiece {
+			// Mark item as sold
+			r.productItem.Status = entity.ProductStatusSold
+			if err := s.itemRepo.Update(ctx, r.productItem); err != nil {
+				return nil, errors.New("failed to update item status")
+			}
+		} else {
+			// Atomic weight deduction (race-safe)
+			if err := s.productRepo.DeductWeight(ctx, r.product.ID, r.weight); err != nil {
+				return nil, errors.New("failed to update product stock: " + err.Error())
+			}
+			// If weight reached 0, mark product as sold
+			updated, err := s.productRepo.GetByID(ctx, r.product.ID)
+			if err == nil && updated != nil && updated.Weight <= 0 {
+				updated.Status = entity.ProductStatusSold
+				s.productRepo.Update(ctx, updated)
+			}
+		}
+
+		// Record stock log
+		stockLog := entity.NewStockLog(input.BranchID, r.saleItem.ProductID, input.UserID, entity.StockActionSale, r.weight)
+		stockLog.ProductItemID = r.productItemID
+		stockLog.ReferenceID = saleNumber
+		if err := s.stockLogRepo.Create(ctx, stockLog); err != nil {
+			return nil, errors.New("failed to record stock log")
+		}
+	}
 
 	// Update customer points and spending
 	if sale.CustomerID != nil {
 		customer, err := s.customerRepo.GetByID(ctx, *sale.CustomerID)
-		if err == nil {
+		if err == nil && customer != nil {
 			if customer.IsMember {
-				// Deduct used points
 				if sale.PointsUsed > 0 {
 					if !customer.RedeemPoints(sale.PointsUsed) {
 						return nil, errors.New("insufficient points")
 					}
 				}
-				// Add earned points
 				customer.AddPoints(sale.PointsEarned)
 			}
-			// Update total spending
 			customer.TotalSpent += sale.NetTotal
-			s.customerRepo.Update(ctx, customer)
+			if err := s.customerRepo.Update(ctx, customer); err != nil {
+				return nil, errors.New("failed to update customer")
+			}
 		}
 	}
 
@@ -325,44 +385,62 @@ func (s *Service) Cancel(ctx context.Context, id primitive.ObjectID) error {
 	// Restore product status or weight
 	for _, item := range sale.Items {
 		product, err := s.productRepo.GetByID(ctx, item.ProductID)
-		if err == nil {
-			if item.ProductItemID != nil {
-				// Piece-based
-				productItem, err := s.itemRepo.GetByID(ctx, *item.ProductItemID)
-				if err == nil && productItem != nil {
-					productItem.Status = entity.ProductStatusAvailable
-					s.itemRepo.Update(ctx, productItem)
-				}
-			} else {
-				// Weight-based
-				product.Weight += item.Weight
-				s.productRepo.Update(ctx, product)
-			}
+		if err != nil {
+			return errors.New("failed to find product for cancellation")
+		}
 
-			// Record Stock Log for Cancellation
-			stockLog := entity.NewStockLog(sale.BranchID, item.ProductID, sale.UserID, entity.StockActionCancel, item.Weight)
-			stockLog.ProductItemID = item.ProductItemID
-			stockLog.ReferenceID = sale.SaleNumber
-			s.stockLogRepo.Create(ctx, stockLog)
+		if item.ProductItemID != nil {
+			// Piece-based: restore item to available
+			productItem, err := s.itemRepo.GetByID(ctx, *item.ProductItemID)
+			if err != nil || productItem == nil {
+				return errors.New("failed to find product item for cancellation")
+			}
+			productItem.Status = entity.ProductStatusAvailable
+			if err := s.itemRepo.Update(ctx, productItem); err != nil {
+				return errors.New("failed to restore product item status")
+			}
+		} else {
+			// Weight-based: restore weight
+			product.Weight += item.Weight
+			if product.Status == entity.ProductStatusSold {
+				product.Status = entity.ProductStatusAvailable
+			}
+			if err := s.productRepo.Update(ctx, product); err != nil {
+				return errors.New("failed to restore product weight")
+			}
+		}
+
+		// Record stock log for cancellation
+		stockLog := entity.NewStockLog(sale.BranchID, item.ProductID, sale.UserID, entity.StockActionCancel, item.Weight)
+		stockLog.ProductItemID = item.ProductItemID
+		stockLog.ReferenceID = sale.SaleNumber
+		if err := s.stockLogRepo.Create(ctx, stockLog); err != nil {
+			return errors.New("failed to record cancellation stock log")
 		}
 	}
 
 	// Restore customer points and spending if needed
 	if sale.CustomerID != nil {
 		customer, err := s.customerRepo.GetByID(ctx, *sale.CustomerID)
-		if err == nil {
+		if err == nil && customer != nil {
 			if customer.IsMember {
 				// Restore used points
 				customer.AddPoints(sale.PointsUsed)
-				// Remove earned points
-				customer.RedeemPoints(sale.PointsEarned)
+				// Remove earned points — if customer already spent them, cap at 0
+				if customer.Membership != nil && customer.Membership.Points >= sale.PointsEarned {
+					customer.RedeemPoints(sale.PointsEarned)
+				} else if customer.Membership != nil {
+					customer.Membership.Points = 0
+				}
 			}
 			// Deduct spending
 			customer.TotalSpent -= sale.NetTotal
 			if customer.TotalSpent < 0 {
 				customer.TotalSpent = 0
 			}
-			s.customerRepo.Update(ctx, customer)
+			if err := s.customerRepo.Update(ctx, customer); err != nil {
+				return errors.New("failed to update customer on cancellation")
+			}
 		}
 	}
 

@@ -30,7 +30,12 @@ func TestCreateSale(t *testing.T) {
 
 		service := NewService(mockSaleRepo, mockProductRepo, mockItemRepo, mockPriceRepo, mockStockLogRepo, mockCustomerRepo, mockBranchRepo, mockUserRepo)
 
-		mockPriceRepo.On("GetCurrent", ctx).Return(&entity.GoldPrice{GoldBarBuy: 30000, GoldBarSell: 31000}, nil)
+		mockPriceRepo.On("GetCurrent", ctx).Return(&entity.GoldPrice{
+			GoldBarBuy:       30000,
+			GoldBarSell:      31000,
+			GoldOrnamentBuy:  29000,
+			GoldOrnamentSell: 30500,
+		}, nil)
 
 		branch := &entity.Branch{ID: branchID, Code: "B001", Name: "Test Branch"}
 		product := &entity.Product{
@@ -38,8 +43,22 @@ func TestCreateSale(t *testing.T) {
 			BranchID:  branchID,
 			SKU:       "GOLD-965-1G",
 			Name:      "Gold 96.5% 1g",
+			GoldType:  "96.5%",
 			StockType: entity.StockTypeWeight,
 			Weight:    10.0,
+			LaborCost: 0,
+			Price:     3000,
+			Cost:      2500,
+			Status:    entity.ProductStatusAvailable,
+		}
+		productAfterDeduct := &entity.Product{
+			ID:        productID,
+			BranchID:  branchID,
+			SKU:       "GOLD-965-1G",
+			Name:      "Gold 96.5% 1g",
+			GoldType:  "96.5%",
+			StockType: entity.StockTypeWeight,
+			Weight:    9.0,
 			Price:     3000,
 			Cost:      2500,
 			Status:    entity.ProductStatusAvailable,
@@ -47,10 +66,16 @@ func TestCreateSale(t *testing.T) {
 
 		mockBranchRepo.On("GetByID", ctx, branchID).Return(branch, nil)
 		mockSaleRepo.On("GenerateSaleNumber", ctx, "B001").Return("S20240001", nil)
-		mockProductRepo.On("GetByID", ctx, productID).Return(product, nil)
-		mockProductRepo.On("Update", ctx, mock.AnythingOfType("*entity.Product")).Return(nil)
+		// Phase 1: validation read
+		mockProductRepo.On("GetByID", ctx, productID).Return(product, nil).Once()
+		// Phase 2: DeductWeight + re-read for zero-check
+		mockProductRepo.On("DeductWeight", ctx, productID, 1.0).Return(nil)
+		mockProductRepo.On("GetByID", ctx, productID).Return(productAfterDeduct, nil).Once()
 		mockStockLogRepo.On("Create", ctx, mock.AnythingOfType("*entity.StockLog")).Return(nil)
 		mockSaleRepo.On("Create", ctx, mock.AnythingOfType("*entity.Sale")).Return(nil)
+
+		// Expected price: GoldOrnamentSell / BahtPerGramOrnament * weight = 30500 / 15.16 * 1.0
+		expectedUnitPrice := 30500.0 / entity.BahtPerGramOrnament * 1.0
 
 		input := CreateSaleInput{
 			BranchID: branchID,
@@ -76,10 +101,12 @@ func TestCreateSale(t *testing.T) {
 		assert.NoError(t, err)
 		assert.NotNil(t, sale)
 		assert.Equal(t, "S20240001", sale.SaleNumber)
-		assert.Equal(t, 2033.5869850432957, sale.NetTotal)
+		assert.InDelta(t, expectedUnitPrice, sale.NetTotal, 0.01)
 		assert.Equal(t, 2500.0, sale.Items[0].Cost)
 
 		mockBranchRepo.AssertExpectations(t)
+		mockProductRepo.AssertExpectations(t)
+		mockStockLogRepo.AssertExpectations(t)
 	})
 
 	t.Run("BranchNotFound", func(t *testing.T) {

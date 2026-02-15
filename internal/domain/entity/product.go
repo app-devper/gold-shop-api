@@ -24,6 +24,26 @@ const (
 	StockTypeWeight StockType = "weight"
 )
 
+const (
+	// BahtPerGramOrnament is the baht-to-gram conversion factor for gold ornaments (96.5%)
+	BahtPerGramOrnament = 15.16
+	// BahtPerGramBar is the baht-to-gram conversion factor for gold bars (99.99%)
+	BahtPerGramBar = 15.244
+)
+
+// IsBarGold returns true if the product's gold type is bar gold (99.99%)
+func (p *Product) IsBarGold() bool {
+	return p.GoldType == "99.99%" || p.GoldType == "99.99"
+}
+
+// DefaultStockType returns the effective StockType, defaulting to StockTypeWeight for legacy products
+func (p *Product) DefaultStockType() StockType {
+	if p.StockType == "" {
+		return StockTypeWeight
+	}
+	return p.StockType
+}
+
 // ProductCategory represents a product category
 type ProductCategory struct {
 	ID          primitive.ObjectID `json:"id" bson:"_id,omitempty"`

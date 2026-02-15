@@ -62,6 +62,7 @@ type ProductRepository interface {
 	Search(ctx context.Context, branchID primitive.ObjectID, query string, limit int) ([]*entity.Product, error)
 	GetLowStock(ctx context.Context, branchID primitive.ObjectID) ([]*entity.Product, error)
 	Update(ctx context.Context, product *entity.Product) error
+	DeductWeight(ctx context.Context, id primitive.ObjectID, amount float64) error
 	Delete(ctx context.Context, id primitive.ObjectID) error
 	Count(ctx context.Context, branchID primitive.ObjectID) (int64, error)
 }

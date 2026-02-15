@@ -152,6 +152,11 @@ func (m *MockProductRepository) Update(ctx context.Context, product *entity.Prod
 	return args.Error(0)
 }
 
+func (m *MockProductRepository) DeductWeight(ctx context.Context, id primitive.ObjectID, amount float64) error {
+	args := m.Called(ctx, id, amount)
+	return args.Error(0)
+}
+
 func (m *MockProductRepository) Delete(ctx context.Context, id primitive.ObjectID) error {
 	args := m.Called(ctx, id)
 	return args.Error(0)

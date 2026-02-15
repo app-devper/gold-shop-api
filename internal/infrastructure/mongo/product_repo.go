@@ -2,6 +2,7 @@ package mongo
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/devper-gold/gold-shop-api/internal/domain/entity"
@@ -175,6 +176,24 @@ func (r *ProductRepository) Update(ctx context.Context, product *entity.Product)
 	}
 	if result.MatchedCount == 0 {
 		return entity.ErrNotFound
+	}
+	return nil
+}
+
+// DeductWeight atomically deducts weight from a product, failing if insufficient stock
+func (r *ProductRepository) DeductWeight(ctx context.Context, id primitive.ObjectID, amount float64) error {
+	result, err := r.collection.UpdateOne(ctx,
+		bson.M{"_id": id, "weight": bson.M{"$gte": amount}},
+		bson.M{
+			"$inc": bson.M{"weight": -amount},
+			"$set": bson.M{"updated_at": time.Now()},
+		},
+	)
+	if err != nil {
+		return err
+	}
+	if result.MatchedCount == 0 {
+		return errors.New("insufficient weight in stock")
 	}
 	return nil
 }

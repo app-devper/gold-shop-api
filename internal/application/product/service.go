@@ -110,8 +110,11 @@ func (s *Service) GetProduct(ctx context.Context, id string) (*entity.Product, e
 		return product, err
 	}
 
-	if product.StockType == entity.StockTypePiece {
-		items, _ := s.itemRepo.GetByProductID(ctx, product.ID, []entity.ProductStatus{entity.ProductStatusAvailable})
+	if product.DefaultStockType() == entity.StockTypePiece {
+		items, err := s.itemRepo.GetByProductID(ctx, product.ID, []entity.ProductStatus{entity.ProductStatusAvailable})
+		if err != nil {
+			return nil, err
+		}
 		product.Items = items
 	}
 
@@ -136,8 +139,11 @@ func (s *Service) GetProducts(ctx context.Context, branchID string, status strin
 	}
 
 	for _, p := range products {
-		if p.StockType == entity.StockTypePiece {
-			items, _ := s.itemRepo.GetByProductID(ctx, p.ID, []entity.ProductStatus{entity.ProductStatusAvailable})
+		if p.DefaultStockType() == entity.StockTypePiece {
+			items, err := s.itemRepo.GetByProductID(ctx, p.ID, []entity.ProductStatus{entity.ProductStatusAvailable})
+			if err != nil {
+				return nil, err
+			}
 			p.Items = items
 		}
 	}
