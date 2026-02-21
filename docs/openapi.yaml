@@ -1,0 +1,2363 @@
+openapi: 3.0.3
+info:
+  title: Gold Shop API
+  description: |
+    Backend API for a Gold Shop Management System (Go + Gin + MongoDB + Redis).
+
+    **Auth flow:** Obtain JWT from external `um-api` → send as `Authorization: Bearer <token>` → middleware validates JWT, resolves Redis session, resolves employee branch/role.
+
+    **Roles:** `ADMIN` (full access) | `MANAGER` (prices, products, reports) | `STAFF` (sales, pawns, savings — default for unregistered employees)
+  version: "2.0.0"
+
+servers:
+  - url: http://localhost:8080
+
+security:
+  - BearerAuth: []
+
+tags:
+  - name: Health
+  - name: Branches
+  - name: Employees
+  - name: Gold Prices
+  - name: Sales
+  - name: Pawns
+  - name: Gold Savings
+  - name: Product Categories
+  - name: Products
+  - name: Customers
+  - name: Inventory
+  - name: Rewards
+  - name: Expenses
+  - name: Reports
+
+paths:
+  /health:
+    get:
+      tags: [Health]
+      summary: Health check
+      security: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+
+  /api/v1/branches:
+    get:
+      tags: [Branches]
+      summary: List all branches
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BranchListResponse"
+    post:
+      tags: [Branches]
+      summary: Create a branch — ADMIN
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BranchRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BranchResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /api/v1/branches/{id}:
+    parameters:
+      - $ref: "#/components/parameters/ID"
+    get:
+      tags: [Branches]
+      summary: Get a branch by ID
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BranchResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      tags: [Branches]
+      summary: Update a branch — ADMIN
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BranchRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BranchResponse"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [Branches]
+      summary: Delete a branch — ADMIN
+      responses:
+        "200":
+          $ref: "#/components/responses/MessageResponse"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/employees:
+    get:
+      tags: [Employees]
+      summary: List all employees
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EmployeeListResponse"
+    post:
+      tags: [Employees]
+      summary: Create an employee — ADMIN
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateEmployeeRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EmployeeResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /api/v1/employees/branch/{branchId}:
+    parameters:
+      - name: branchId
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      tags: [Employees]
+      summary: List employees by branch
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EmployeeListResponse"
+
+  /api/v1/employees/{id}:
+    parameters:
+      - $ref: "#/components/parameters/ID"
+    get:
+      tags: [Employees]
+      summary: Get an employee by ID
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EmployeeResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      tags: [Employees]
+      summary: Update an employee — ADMIN
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateEmployeeRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EmployeeResponse"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [Employees]
+      summary: Delete an employee — ADMIN
+      responses:
+        "200":
+          $ref: "#/components/responses/MessageResponse"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/gold-prices/current:
+    get:
+      tags: [Gold Prices]
+      summary: Get current gold prices
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GoldPriceResponse"
+
+  /api/v1/gold-prices/history:
+    get:
+      tags: [Gold Prices]
+      summary: Get gold price history
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GoldPriceListResponse"
+
+  /api/v1/gold-prices:
+    post:
+      tags: [Gold Prices]
+      summary: Set gold price manually — ADMIN, MANAGER
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetGoldPriceRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GoldPriceResponse"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /api/v1/gold-prices/sync:
+    post:
+      tags: [Gold Prices]
+      summary: Sync gold price from external API — ADMIN, MANAGER
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GoldPriceResponse"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /api/v1/sales:
+    get:
+      tags: [Sales]
+      summary: List sales
+      parameters:
+        - name: branch_id
+          in: query
+          schema:
+            type: string
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [completed, pending, cancelled]
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SaleListResponse"
+    post:
+      tags: [Sales]
+      summary: Create a sale
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSaleRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SaleResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  /api/v1/sales/unpaid:
+    get:
+      tags: [Sales]
+      summary: Get unpaid sales for the current branch
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SaleListResponse"
+
+  /api/v1/sales/{id}:
+    parameters:
+      - $ref: "#/components/parameters/ID"
+    get:
+      tags: [Sales]
+      summary: Get a sale by ID
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SaleResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/sales/{id}/cancel:
+    parameters:
+      - $ref: "#/components/parameters/ID"
+    post:
+      tags: [Sales]
+      summary: Cancel a sale
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SaleResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/sales/{id}/receipt:
+    parameters:
+      - $ref: "#/components/parameters/ID"
+    get:
+      tags: [Sales]
+      summary: Get sale receipt
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SaleResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/pawns:
+    get:
+      tags: [Pawns]
+      summary: List pawn tickets
+      parameters:
+        - name: branch_id
+          in: query
+          schema:
+            type: string
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [active, redeemed, forfeited, extended]
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PawnListResponse"
+    post:
+      tags: [Pawns]
+      summary: Create a pawn ticket
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreatePawnRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PawnResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  /api/v1/pawns/due-soon:
+    get:
+      tags: [Pawns]
+      summary: Get pawns due soon
+      parameters:
+        - name: days
+          in: query
+          schema:
+            type: integer
+            default: 7
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PawnListResponse"
+
+  /api/v1/pawns/{id}:
+    parameters:
+      - $ref: "#/components/parameters/ID"
+    get:
+      tags: [Pawns]
+      summary: Get a pawn ticket by ID
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PawnResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/pawns/{id}/pay-interest:
+    parameters:
+      - $ref: "#/components/parameters/ID"
+    post:
+      tags: [Pawns]
+      summary: Record an interest payment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [amount]
+              properties:
+                amount:
+                  type: number
+                  example: 1500.00
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PawnResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  /api/v1/pawns/{id}/redeem:
+    parameters:
+      - $ref: "#/components/parameters/ID"
+    post:
+      tags: [Pawns]
+      summary: Redeem a pawned item
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [interest]
+              properties:
+                interest:
+                  type: number
+                discount:
+                  type: number
+                  default: 0
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PawnResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  /api/v1/pawns/{id}/extend:
+    parameters:
+      - $ref: "#/components/parameters/ID"
+    post:
+      tags: [Pawns]
+      summary: Extend a pawn term
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [additional_months]
+              properties:
+                additional_months:
+                  type: integer
+                  example: 1
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PawnResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  /api/v1/pawns/{id}/forfeit:
+    parameters:
+      - $ref: "#/components/parameters/ID"
+    post:
+      tags: [Pawns]
+      summary: Forfeit a pawned item
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PawnResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/gold-savings:
+    get:
+      tags: [Gold Savings]
+      summary: List gold saving accounts
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [active, closed]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GoldSavingListResponse"
+    post:
+      tags: [Gold Savings]
+      summary: Open a new gold saving account
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OpenGoldSavingRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GoldSavingResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  /api/v1/gold-savings/{id}:
+    parameters:
+      - $ref: "#/components/parameters/ID"
+    get:
+      tags: [Gold Savings]
+      summary: Get a gold saving account by ID
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GoldSavingResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/gold-savings/{id}/deposit:
+    parameters:
+      - $ref: "#/components/parameters/ID"
+    post:
+      tags: [Gold Savings]
+      summary: Deposit into a gold saving account
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [amount]
+              properties:
+                amount:
+                  type: number
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GoldSavingResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  /api/v1/gold-savings/{id}/withdraw:
+    parameters:
+      - $ref: "#/components/parameters/ID"
+    post:
+      tags: [Gold Savings]
+      summary: Withdraw from a gold saving account
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [amount]
+              properties:
+                amount:
+                  type: number
+                as_cash:
+                  type: boolean
+                  default: false
+                  description: Withdraw as cash equivalent instead of physical gold
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GoldSavingResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  /api/v1/gold-savings/{id}/close:
+    parameters:
+      - $ref: "#/components/parameters/ID"
+    post:
+      tags: [Gold Savings]
+      summary: Close a gold saving account
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GoldSavingResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/gold-savings/{id}/statement:
+    parameters:
+      - $ref: "#/components/parameters/ID"
+    get:
+      tags: [Gold Savings]
+      summary: Get account statement (transaction history)
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GoldSavingResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/product-categories:
+    get:
+      tags: [Product Categories]
+      summary: List product categories
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProductCategoryListResponse"
+    post:
+      tags: [Product Categories]
+      summary: Create a product category — ADMIN, MANAGER
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProductCategoryRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProductCategoryResponse"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /api/v1/products:
+    get:
+      tags: [Products]
+      summary: List products
+      parameters:
+        - name: branch_id
+          in: query
+          schema:
+            type: string
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [available, sold, reserved, pawned]
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProductListResponse"
+    post:
+      tags: [Products]
+      summary: Create a product — ADMIN, MANAGER
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProductRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProductResponse"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /api/v1/products/{id}:
+    parameters:
+      - $ref: "#/components/parameters/ID"
+    get:
+      tags: [Products]
+      summary: Get a product by ID
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProductResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      tags: [Products]
+      summary: Update a product — ADMIN, MANAGER
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProductRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProductResponse"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [Products]
+      summary: Delete a product — ADMIN, MANAGER
+      responses:
+        "200":
+          $ref: "#/components/responses/MessageResponse"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/customers:
+    get:
+      tags: [Customers]
+      summary: List customers
+      parameters:
+        - name: search
+          in: query
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CustomerListResponse"
+    post:
+      tags: [Customers]
+      summary: Create a customer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CustomerRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CustomerResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  /api/v1/customers/rfid/{rfid}:
+    parameters:
+      - name: rfid
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      tags: [Customers]
+      summary: Get a customer by RFID card
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CustomerResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/customers/{id}:
+    parameters:
+      - $ref: "#/components/parameters/ID"
+    get:
+      tags: [Customers]
+      summary: Get a customer by ID
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CustomerResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      tags: [Customers]
+      summary: Update a customer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CustomerRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CustomerResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [Customers]
+      summary: Delete a customer — ADMIN, MANAGER
+      responses:
+        "200":
+          $ref: "#/components/responses/MessageResponse"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/inventory/transfers:
+    get:
+      tags: [Inventory]
+      summary: List inventory transfers
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [pending, in_transit, received, cancelled]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InventoryTransferListResponse"
+    post:
+      tags: [Inventory]
+      summary: Create an inventory transfer request
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateInventoryTransferRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InventoryTransferResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  /api/v1/inventory/transfers/{id}:
+    parameters:
+      - $ref: "#/components/parameters/ID"
+    get:
+      tags: [Inventory]
+      summary: Get an inventory transfer by ID
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InventoryTransferResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/inventory/transfers/{id}/approve:
+    parameters:
+      - $ref: "#/components/parameters/ID"
+    post:
+      tags: [Inventory]
+      summary: Approve an inventory transfer
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InventoryTransferResponse"
+
+  /api/v1/inventory/transfers/{id}/receive:
+    parameters:
+      - $ref: "#/components/parameters/ID"
+    post:
+      tags: [Inventory]
+      summary: Mark an inventory transfer as received
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InventoryTransferResponse"
+
+  /api/v1/inventory/transfers/{id}/cancel:
+    parameters:
+      - $ref: "#/components/parameters/ID"
+    post:
+      tags: [Inventory]
+      summary: Cancel an inventory transfer
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InventoryTransferResponse"
+
+  /api/v1/rewards:
+    get:
+      tags: [Rewards]
+      summary: List available rewards
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RewardListResponse"
+    post:
+      tags: [Rewards]
+      summary: Create a reward — ADMIN, MANAGER
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RewardRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RewardResponse"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /api/v1/rewards/redeem:
+    post:
+      tags: [Rewards]
+      summary: Redeem a reward using loyalty points
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RedeemRewardRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RewardRedemptionResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  /api/v1/expenses:
+    get:
+      tags: [Expenses]
+      summary: List expenses
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExpenseListResponse"
+    post:
+      tags: [Expenses]
+      summary: Create an expense
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ExpenseRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExpenseResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  /api/v1/expenses/categories:
+    get:
+      tags: [Expenses]
+      summary: List expense categories
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExpenseCategoryListResponse"
+    post:
+      tags: [Expenses]
+      summary: Create an expense category — ADMIN
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ExpenseCategoryRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExpenseCategoryResponse"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /api/v1/reports/dashboard:
+    get:
+      tags: [Reports]
+      summary: Dashboard summary data
+      parameters:
+        - name: branch_id
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GenericDataResponse"
+
+  /api/v1/reports/profit-loss:
+    get:
+      tags: [Reports]
+      summary: Profit and loss report
+      parameters:
+        - name: branch_id
+          in: query
+          schema:
+            type: string
+        - name: from
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GenericDataResponse"
+
+  /api/v1/reports/multi-branch:
+    get:
+      tags: [Reports]
+      summary: Multi-branch profit/loss report — ADMIN
+      parameters:
+        - name: from
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GenericDataResponse"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /api/v1/reports/top-products:
+    get:
+      tags: [Reports]
+      summary: Top selling products
+      parameters:
+        - name: branch_id
+          in: query
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 10
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GenericDataResponse"
+
+  /api/v1/reports/employee-performance:
+    get:
+      tags: [Reports]
+      summary: Employee sales performance
+      parameters:
+        - name: branch_id
+          in: query
+          schema:
+            type: string
+        - name: from
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GenericDataResponse"
+
+  /api/v1/reports/trends:
+    get:
+      tags: [Reports]
+      summary: Sales trends over time
+      parameters:
+        - name: branch_id
+          in: query
+          schema:
+            type: string
+        - name: from
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GenericDataResponse"
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    ID:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+      description: MongoDB ObjectID
+
+  responses:
+    BadRequest:
+      description: Bad request
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Unauthorized:
+      description: Unauthorized — missing or invalid JWT
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Forbidden:
+      description: Forbidden — insufficient role
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    MessageResponse:
+      description: OK with message
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/MessageResponse"
+
+  schemas:
+    # ── Common ──────────────────────────────────────────────────────────────
+    ErrorResponse:
+      type: object
+      properties:
+        message:
+          type: string
+          example: resource not found
+
+    MessageResponse:
+      type: object
+      properties:
+        message:
+          type: string
+          example: deleted successfully
+
+    GenericDataResponse:
+      type: object
+      properties:
+        data:
+          type: object
+
+    # ── Branch ───────────────────────────────────────────────────────────────
+    Branch:
+      type: object
+      properties:
+        id:
+          type: string
+          example: 64a1b2c3d4e5f6a7b8c9d0e1
+        code:
+          type: string
+          example: HQ
+        name:
+          type: string
+          example: Head Quarter
+        address:
+          type: string
+        phone:
+          type: string
+        is_active:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    BranchRequest:
+      type: object
+      required: [code, name]
+      properties:
+        code:
+          type: string
+          example: HQ
+        name:
+          type: string
+          example: Head Quarter
+        address:
+          type: string
+        phone:
+          type: string
+
+    BranchResponse:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/Branch"
+
+    BranchListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Branch"
+
+    # ── Employee ─────────────────────────────────────────────────────────────
+    Employee:
+      type: object
+      properties:
+        id:
+          type: string
+        branchId:
+          type: string
+        userId:
+          type: string
+        role:
+          type: string
+          enum: [ADMIN, MANAGER, STAFF]
+        createdBy:
+          type: string
+        createdDate:
+          type: string
+          format: date-time
+        updatedBy:
+          type: string
+        updatedDate:
+          type: string
+          format: date-time
+
+    CreateEmployeeRequest:
+      type: object
+      required: [branchId, userId, role]
+      properties:
+        branchId:
+          type: string
+        userId:
+          type: string
+        role:
+          type: string
+          enum: [ADMIN, MANAGER, STAFF]
+
+    UpdateEmployeeRequest:
+      type: object
+      properties:
+        branchId:
+          type: string
+        role:
+          type: string
+          enum: [ADMIN, MANAGER, STAFF]
+
+    EmployeeResponse:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/Employee"
+
+    EmployeeListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Employee"
+
+    # ── Gold Price ────────────────────────────────────────────────────────────
+    GoldPrice:
+      type: object
+      properties:
+        id:
+          type: string
+        date:
+          type: string
+          format: date-time
+        gold_bar_buy:
+          type: number
+          example: 32500.00
+        gold_bar_sell:
+          type: number
+          example: 32600.00
+        gold_ornament_buy:
+          type: number
+          example: 31900.00
+        gold_ornament_sell:
+          type: number
+          example: 33100.00
+        source:
+          type: string
+          example: api
+        is_active:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+
+    SetGoldPriceRequest:
+      type: object
+      required: [gold_bar_buy, gold_bar_sell, gold_ornament_buy, gold_ornament_sell]
+      properties:
+        gold_bar_buy:
+          type: number
+        gold_bar_sell:
+          type: number
+        gold_ornament_buy:
+          type: number
+        gold_ornament_sell:
+          type: number
+
+    GoldPriceResponse:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/GoldPrice"
+
+    GoldPriceListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/GoldPrice"
+
+    # ── Sale ─────────────────────────────────────────────────────────────────
+    SaleItem:
+      type: object
+      properties:
+        product_id:
+          type: string
+        product_item_id:
+          type: string
+        product_name:
+          type: string
+        gold_type:
+          type: string
+        weight:
+          type: number
+        price_level:
+          type: string
+        unit_price:
+          type: number
+        labor_cost:
+          type: number
+        discount:
+          type: number
+        discount_type:
+          type: string
+          enum: [amount, percent]
+        cost:
+          type: number
+        total:
+          type: number
+
+    OldGoldItem:
+      type: object
+      properties:
+        description:
+          type: string
+        gold_type:
+          type: string
+        weight:
+          type: number
+        price_per_unit:
+          type: number
+        total:
+          type: number
+
+    Payment:
+      type: object
+      properties:
+        method:
+          type: string
+          enum: [cash, credit_card, transfer, voucher]
+        amount:
+          type: number
+        reference:
+          type: string
+
+    Sale:
+      type: object
+      properties:
+        id:
+          type: string
+        branch_id:
+          type: string
+        sale_number:
+          type: string
+        customer_id:
+          type: string
+        user_id:
+          type: string
+        sale_type:
+          type: string
+          enum: [sell, buy_old, exchange]
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/SaleItem"
+        old_gold_items:
+          type: array
+          items:
+            $ref: "#/components/schemas/OldGoldItem"
+        subtotal:
+          type: number
+        discount:
+          type: number
+        discount_type:
+          type: string
+          enum: [amount, percent]
+        old_gold_value:
+          type: number
+        net_total:
+          type: number
+        payments:
+          type: array
+          items:
+            $ref: "#/components/schemas/Payment"
+        points_earned:
+          type: integer
+        points_used:
+          type: integer
+        status:
+          type: string
+          enum: [completed, pending, cancelled]
+        notes:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    CreateSaleRequest:
+      type: object
+      required: [sale_type, items, payments]
+      properties:
+        customer_id:
+          type: string
+        sale_type:
+          type: string
+          enum: [sell, buy_old, exchange]
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/SaleItem"
+        old_gold_items:
+          type: array
+          items:
+            $ref: "#/components/schemas/OldGoldItem"
+        discount:
+          type: number
+          default: 0
+        discount_type:
+          type: string
+          enum: [amount, percent]
+          default: amount
+        payments:
+          type: array
+          items:
+            $ref: "#/components/schemas/Payment"
+        points_used:
+          type: integer
+          default: 0
+        notes:
+          type: string
+
+    SaleResponse:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/Sale"
+
+    SaleListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Sale"
+
+    # ── Pawn ─────────────────────────────────────────────────────────────────
+    PawnItem:
+      type: object
+      properties:
+        description:
+          type: string
+        gold_type:
+          type: string
+        weight:
+          type: number
+        appraised_value:
+          type: number
+        images:
+          type: array
+          items:
+            type: string
+
+    Pawn:
+      type: object
+      properties:
+        id:
+          type: string
+        branch_id:
+          type: string
+        pawn_number:
+          type: string
+        customer_id:
+          type: string
+        user_id:
+          type: string
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/PawnItem"
+        principal:
+          type: number
+        interest_rate:
+          type: number
+        term_months:
+          type: integer
+        start_date:
+          type: string
+          format: date-time
+        due_date:
+          type: string
+          format: date-time
+        status:
+          type: string
+          enum: [active, redeemed, forfeited, extended]
+        notes:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    CreatePawnRequest:
+      type: object
+      required: [customer_id, items, principal, interest_rate, term_months]
+      properties:
+        customer_id:
+          type: string
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/PawnItem"
+        principal:
+          type: number
+        interest_rate:
+          type: number
+        term_months:
+          type: integer
+        notes:
+          type: string
+
+    PawnResponse:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/Pawn"
+
+    PawnListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Pawn"
+
+    # ── Gold Saving ───────────────────────────────────────────────────────────
+    GoldSavingTransaction:
+      type: object
+      properties:
+        date:
+          type: string
+          format: date-time
+        type:
+          type: string
+          enum: [deposit, withdrawal]
+        amount:
+          type: number
+        gold_price:
+          type: number
+        gold_weight:
+          type: number
+        balance_after:
+          type: number
+
+    GoldSaving:
+      type: object
+      properties:
+        id:
+          type: string
+        branch_id:
+          type: string
+        account_number:
+          type: string
+        customer_id:
+          type: string
+        saving_type:
+          type: string
+          enum: [money, weight]
+        min_deposit:
+          type: number
+        min_withdrawal:
+          type: number
+        gold_balance:
+          type: number
+        cash_balance:
+          type: number
+        transactions:
+          type: array
+          items:
+            $ref: "#/components/schemas/GoldSavingTransaction"
+        status:
+          type: string
+          enum: [active, closed]
+        opened_date:
+          type: string
+          format: date-time
+        closed_date:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+
+    OpenGoldSavingRequest:
+      type: object
+      required: [customer_id, saving_type]
+      properties:
+        customer_id:
+          type: string
+        saving_type:
+          type: string
+          enum: [money, weight]
+        min_deposit:
+          type: number
+          default: 0
+        min_withdrawal:
+          type: number
+          default: 0
+
+    GoldSavingResponse:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/GoldSaving"
+
+    GoldSavingListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/GoldSaving"
+
+    # ── Product Category ──────────────────────────────────────────────────────
+    ProductCategory:
+      type: object
+      properties:
+        id:
+          type: string
+        code:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        is_active:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+
+    ProductCategoryRequest:
+      type: object
+      required: [code, name]
+      properties:
+        code:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+
+    ProductCategoryResponse:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/ProductCategory"
+
+    ProductCategoryListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProductCategory"
+
+    # ── Product ───────────────────────────────────────────────────────────────
+    Product:
+      type: object
+      properties:
+        id:
+          type: string
+        branch_id:
+          type: string
+        category_id:
+          type: string
+        sku:
+          type: string
+        barcode:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        stock_type:
+          type: string
+          enum: [piece, weight]
+        gold_type:
+          type: string
+          example: 96.5%
+        weight:
+          type: number
+        weight_unit:
+          type: string
+          example: gram
+        labor_cost:
+          type: number
+        price:
+          type: number
+        cost:
+          type: number
+        status:
+          type: string
+          enum: [available, sold, reserved, pawned]
+        images:
+          type: array
+          items:
+            type: string
+        created_at:
+          type: string
+          format: date-time
+
+    ProductRequest:
+      type: object
+      required: [category_id, sku, name, gold_type, stock_type, weight, labor_cost]
+      properties:
+        category_id:
+          type: string
+        sku:
+          type: string
+        barcode:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        stock_type:
+          type: string
+          enum: [piece, weight]
+        gold_type:
+          type: string
+        weight:
+          type: number
+        labor_cost:
+          type: number
+
+    ProductResponse:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/Product"
+
+    ProductListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Product"
+
+    # ── Customer ──────────────────────────────────────────────────────────────
+    Membership:
+      type: object
+      properties:
+        tier:
+          type: string
+          enum: [bronze, silver, gold, platinum]
+        points:
+          type: integer
+        join_date:
+          type: string
+          format: date-time
+
+    Customer:
+      type: object
+      properties:
+        id:
+          type: string
+        member_code:
+          type: string
+        rfid_card:
+          type: string
+        full_name:
+          type: string
+        id_card:
+          type: string
+        phone:
+          type: string
+        email:
+          type: string
+        address:
+          type: string
+        is_member:
+          type: boolean
+        membership:
+          $ref: "#/components/schemas/Membership"
+        total_spent:
+          type: number
+        created_at:
+          type: string
+          format: date-time
+
+    CustomerRequest:
+      type: object
+      required: [full_name, phone]
+      properties:
+        full_name:
+          type: string
+        phone:
+          type: string
+        email:
+          type: string
+        address:
+          type: string
+        id_card:
+          type: string
+        rfid_card:
+          type: string
+        is_member:
+          type: boolean
+          default: false
+
+    CustomerResponse:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/Customer"
+
+    CustomerListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Customer"
+
+    # ── Inventory Transfer ────────────────────────────────────────────────────
+    TransferItem:
+      type: object
+      properties:
+        product_id:
+          type: string
+        quantity:
+          type: integer
+
+    InventoryTransfer:
+      type: object
+      properties:
+        id:
+          type: string
+        transfer_number:
+          type: string
+        from_branch_id:
+          type: string
+        to_branch_id:
+          type: string
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/TransferItem"
+        status:
+          type: string
+          enum: [pending, in_transit, received, cancelled]
+        requested_by:
+          type: string
+        approved_by:
+          type: string
+        received_by:
+          type: string
+        notes:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    CreateInventoryTransferRequest:
+      type: object
+      required: [to_branch_id, items]
+      properties:
+        to_branch_id:
+          type: string
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/TransferItem"
+        notes:
+          type: string
+
+    InventoryTransferResponse:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/InventoryTransfer"
+
+    InventoryTransferListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/InventoryTransfer"
+
+    # ── Reward ────────────────────────────────────────────────────────────────
+    Reward:
+      type: object
+      properties:
+        id:
+          type: string
+        code:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        points_required:
+          type: integer
+        quantity:
+          type: integer
+        is_active:
+          type: boolean
+        valid_from:
+          type: string
+          format: date-time
+        valid_until:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+
+    RewardRequest:
+      type: object
+      required: [code, name, points_required, quantity, valid_from, valid_until]
+      properties:
+        code:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        points_required:
+          type: integer
+        quantity:
+          type: integer
+        valid_from:
+          type: string
+          format: date-time
+        valid_until:
+          type: string
+          format: date-time
+
+    RedeemRewardRequest:
+      type: object
+      required: [customer_id, reward_id]
+      properties:
+        customer_id:
+          type: string
+        reward_id:
+          type: string
+
+    RewardRedemption:
+      type: object
+      properties:
+        id:
+          type: string
+        customer_id:
+          type: string
+        reward_id:
+          type: string
+        branch_id:
+          type: string
+        points_used:
+          type: integer
+        redeemed_at:
+          type: string
+          format: date-time
+
+    RewardResponse:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/Reward"
+
+    RewardListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Reward"
+
+    RewardRedemptionResponse:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/RewardRedemption"
+
+    # ── Expense ───────────────────────────────────────────────────────────────
+    ExpenseCategory:
+      type: object
+      properties:
+        id:
+          type: string
+        code:
+          type: string
+        name:
+          type: string
+        is_active:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+
+    ExpenseCategoryRequest:
+      type: object
+      required: [code, name]
+      properties:
+        code:
+          type: string
+        name:
+          type: string
+
+    ExpenseCategoryResponse:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/ExpenseCategory"
+
+    ExpenseCategoryListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/ExpenseCategory"
+
+    Expense:
+      type: object
+      properties:
+        id:
+          type: string
+        branch_id:
+          type: string
+        category_id:
+          type: string
+        expense_number:
+          type: string
+        description:
+          type: string
+        amount:
+          type: number
+        expense_date:
+          type: string
+          format: date-time
+        receipt_number:
+          type: string
+        status:
+          type: string
+          enum: [pending, approved, rejected]
+        notes:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    ExpenseRequest:
+      type: object
+      required: [category_id, description, amount, expense_date]
+      properties:
+        category_id:
+          type: string
+        description:
+          type: string
+        amount:
+          type: number
+        expense_date:
+          type: string
+          format: date-time
+        receipt_number:
+          type: string
+        notes:
+          type: string
+
+    ExpenseResponse:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/Expense"
+
+    ExpenseListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Expense"
