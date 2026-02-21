@@ -87,7 +87,7 @@ func (gs *GoldSaving) Deposit(amount, goldPrice float64, processedBy primitive.O
 
 	if gs.SavingType == GoldSavingByMoney {
 		// Calculate gold weight based on current price
-		goldWeight = math.Round((amount/goldPrice*15.2)*100) / 100
+		goldWeight = math.Round((amount/goldPrice)*10000) / 10000
 		gs.GoldBalance += goldWeight
 		gs.CashBalance += amount
 	} else {
