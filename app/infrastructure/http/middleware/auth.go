@@ -27,7 +27,7 @@ type AccessClaims struct {
 }
 
 // RequireAuthenticated validates the JWT token issued by um-api
-func RequireAuthenticated(secretKey, clientId, system string) gin.HandlerFunc {
+func RequireAuthenticated(secretKey string) gin.HandlerFunc {
 	jwtKey := []byte(secretKey)
 	return func(c *gin.Context) {
 		token := c.GetHeader("Authorization")
@@ -51,16 +51,6 @@ func RequireAuthenticated(secretKey, clientId, system string) gin.HandlerFunc {
 		}
 		if tkn == nil || !tkn.Valid || claims.Id == "" {
 			utils.UnauthorizedResponse(c, "token invalid")
-			c.Abort()
-			return
-		}
-		if system != claims.System {
-			utils.UnauthorizedResponse(c, "system invalid")
-			c.Abort()
-			return
-		}
-		if clientId != claims.ClientId {
-			utils.UnauthorizedResponse(c, "clientId invalid")
 			c.Abort()
 			return
 		}

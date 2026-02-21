@@ -133,7 +133,7 @@ func (a App) StartApp() {
 	if err := r.SetTrustedProxies(nil); err != nil {
 		logrus.Error(err)
 	}
-	router.Setup(r, cfg.Auth.SecretKey, cfg.Auth.ClientID, cfg.Auth.System, sessionRepo, employeeRepo, branchRepo, handlers)
+	router.Setup(r, cfg.Auth.SecretKey, sessionRepo, employeeRepo, branchRepo, handlers)
 
 	// Start server
 	go func() {
