@@ -64,16 +64,10 @@ func (c *ThaiGoldAPIClient) GetCurrentPrice(ctx context.Context) (*gold_price.Go
 		return val
 	}
 
-	// Mapping:
-	// api.gold_bar.buy (77,700) -> GoldBarSell (Shop sells to customer)
-	// api.gold_bar.sell (77,600) -> GoldBarBuy (Shop buys from customer)
-	// api.gold.buy (78,500) -> GoldOrnamentSell (Shop sells to customer)
-	// api.gold.sell (76,042.56) -> GoldOrnamentBuy (Shop buys from customer)
-
 	return &gold_price.GoldPriceData{
-		GoldBarBuy:       parsePrice(apiResp.Response.Price.GoldBar.Sell),
-		GoldBarSell:      parsePrice(apiResp.Response.Price.GoldBar.Buy),
-		GoldOrnamentBuy:  parsePrice(apiResp.Response.Price.Gold.Sell),
-		GoldOrnamentSell: parsePrice(apiResp.Response.Price.Gold.Buy),
+		GoldBarBuy:       parsePrice(apiResp.Response.Price.GoldBar.Buy),
+		GoldBarSell:      parsePrice(apiResp.Response.Price.GoldBar.Sell),
+		GoldOrnamentBuy:  parsePrice(apiResp.Response.Price.Gold.Buy),
+		GoldOrnamentSell: parsePrice(apiResp.Response.Price.Gold.Sell),
 	}, nil
 }
