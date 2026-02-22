@@ -64,9 +64,9 @@ func Setup(r *gin.Engine, secretKey string, sessionRepo middleware.SessionLookup
 			employees.GET("", handlers.Employee.GetEmployees)
 			employees.GET("/branch/:branchId", handlers.Employee.GetEmployeesByBranch)
 			employees.GET("/:id", handlers.Employee.GetEmployee)
-			employees.POST("", middleware.RoleMiddleware(entity.EmployeeRoleAdmin), handlers.Employee.CreateEmployee)
-			employees.PUT("/:id", middleware.RoleMiddleware(entity.EmployeeRoleAdmin), handlers.Employee.UpdateEmployee)
-			employees.DELETE("/:id", middleware.RoleMiddleware(entity.EmployeeRoleAdmin), handlers.Employee.DeleteEmployee)
+			employees.POST("", middleware.RequireRole(entity.UMRoleSuper, entity.UMRoleAdmin), handlers.Employee.CreateEmployee)
+			employees.PUT("/:id", middleware.RequireRole(entity.UMRoleSuper, entity.UMRoleAdmin), handlers.Employee.UpdateEmployee)
+			employees.DELETE("/:id", middleware.RequireRole(entity.UMRoleSuper, entity.UMRoleAdmin), handlers.Employee.DeleteEmployee)
 		}
 
 		// Gold Prices

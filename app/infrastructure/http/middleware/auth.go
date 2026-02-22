@@ -114,7 +114,6 @@ func RequireBranch(employeeRepo repository.EmployeeRepository, branchRepo reposi
 	}
 }
 
-// RoleMiddleware checks the EmployeeRole set by RequireBranch
 func RoleMiddleware(allowedRoles ...entity.EmployeeRole) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		role := c.GetString("EmployeeRole")
@@ -130,6 +129,25 @@ func RoleMiddleware(allowedRoles ...entity.EmployeeRole) gin.HandlerFunc {
 			}
 		}
 		utils.ForbiddenResponse(c, "Don't have permission")
+		c.Abort()
+	}
+}
+
+func RequireRole(allowedRoles ...entity.UMRole) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		role := c.GetString("Role")
+		if role == "" {
+			utils.ForbiddenResponse(c, "Invalid request, restricted endpoint")
+			c.Abort()
+			return
+		}
+		for _, r := range allowedRoles {
+			if string(r) == role {
+				c.Next()
+				return
+			}
+		}
+		utils.ForbiddenResponse(c, "Don't have um permission")
 		c.Abort()
 	}
 }
