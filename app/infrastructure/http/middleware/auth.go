@@ -8,8 +8,8 @@ import (
 	"github.com/devper-gold/gold-shop-api/app/domain/entity"
 	"github.com/devper-gold/gold-shop-api/app/domain/repository"
 	"github.com/devper-gold/gold-shop-api/pkg/utils"
-	"github.com/dgrijalva/jwt-go"
 	"github.com/gin-gonic/gin"
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/sirupsen/logrus"
 )
 
@@ -23,7 +23,7 @@ type AccessClaims struct {
 	Role     string `json:"role"`
 	System   string `json:"system"`
 	ClientId string `json:"clientId"`
-	jwt.StandardClaims
+	jwt.RegisteredClaims
 }
 
 // RequireAuthenticated validates the JWT token issued by um-api
@@ -49,18 +49,18 @@ func RequireAuthenticated(secretKey string) gin.HandlerFunc {
 			c.Abort()
 			return
 		}
-		if tkn == nil || !tkn.Valid || claims.Id == "" {
+		if tkn == nil || !tkn.Valid || claims.ID == "" {
 			utils.UnauthorizedResponse(c, "AUT-401-003", "token invalid")
 			c.Abort()
 			return
 		}
 
-		c.Set("SessionId", claims.Id)
+		c.Set("SessionId", claims.ID)
 		c.Set("Role", claims.Role)
 		c.Set("System", claims.System)
 		c.Set("ClientId", claims.ClientId)
 
-		logrus.Info("SessionId: " + claims.Id)
+		logrus.Info("SessionId: " + claims.ID)
 		logrus.Info("Role: " + claims.Role)
 		c.Next()
 	}
