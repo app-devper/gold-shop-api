@@ -198,6 +198,24 @@ func (r *ProductRepository) DeductWeight(ctx context.Context, id primitive.Objec
 	return nil
 }
 
+// AddWeight atomically adds weight to a product and restores status to available if it was sold
+func (r *ProductRepository) AddWeight(ctx context.Context, id primitive.ObjectID, amount float64) error {
+	result, err := r.collection.UpdateOne(ctx,
+		bson.M{"_id": id},
+		bson.M{
+			"$inc": bson.M{"weight": amount},
+			"$set": bson.M{"updated_at": time.Now(), "status": entity.ProductStatusAvailable},
+		},
+	)
+	if err != nil {
+		return err
+	}
+	if result.MatchedCount == 0 {
+		return entity.ErrNotFound
+	}
+	return nil
+}
+
 // Delete deletes a product
 func (r *ProductRepository) Delete(ctx context.Context, id primitive.ObjectID) error {
 	result, err := r.collection.DeleteOne(ctx, bson.M{"_id": id})

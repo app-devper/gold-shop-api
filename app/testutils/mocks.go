@@ -9,6 +9,13 @@ import (
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
+// MockTransactionManager executes fn directly (no real transaction in tests)
+type MockTransactionManager struct{}
+
+func (m *MockTransactionManager) WithTransaction(ctx context.Context, fn func(ctx context.Context) error) error {
+	return fn(ctx)
+}
+
 type MockSaleRepository struct {
 	mock.Mock
 }
@@ -153,6 +160,11 @@ func (m *MockProductRepository) Update(ctx context.Context, product *entity.Prod
 }
 
 func (m *MockProductRepository) DeductWeight(ctx context.Context, id primitive.ObjectID, amount float64) error {
+	args := m.Called(ctx, id, amount)
+	return args.Error(0)
+}
+
+func (m *MockProductRepository) AddWeight(ctx context.Context, id primitive.ObjectID, amount float64) error {
 	args := m.Called(ctx, id, amount)
 	return args.Error(0)
 }

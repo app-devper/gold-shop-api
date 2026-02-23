@@ -152,9 +152,6 @@ func (s *Sale) CalculateTotals() {
 	}
 
 	s.NetTotal = s.Subtotal - discountAmount - s.OldGoldValue
-	if s.NetTotal < 0 {
-		s.NetTotal = 0
-	}
 }
 
 // GetTotalPayments returns total amount paid

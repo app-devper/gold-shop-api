@@ -36,6 +36,11 @@ func NewClient(uri, databaseName string) (*Client, error) {
 	}, nil
 }
 
+// MongoClient returns the underlying mongo.Client for transactions
+func (c *Client) MongoClient() *mongo.Client {
+	return c.client
+}
+
 // Database returns the MongoDB database
 func (c *Client) Database() *mongo.Database {
 	return c.database

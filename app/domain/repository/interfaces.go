@@ -7,6 +7,13 @@ import (
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
+// TransactionManager provides database transaction support
+type TransactionManager interface {
+	// WithTransaction executes fn inside an atomic transaction.
+	// If fn returns an error the transaction is aborted; otherwise it is committed.
+	WithTransaction(ctx context.Context, fn func(ctx context.Context) error) error
+}
+
 // EmployeeRepository defines employee data operations
 type EmployeeRepository interface {
 	Create(ctx context.Context, employee *entity.Employee) error
@@ -74,6 +81,7 @@ type ProductRepository interface {
 	GetLowStock(ctx context.Context, branchID primitive.ObjectID) ([]*entity.Product, error)
 	Update(ctx context.Context, product *entity.Product) error
 	DeductWeight(ctx context.Context, id primitive.ObjectID, amount float64) error
+	AddWeight(ctx context.Context, id primitive.ObjectID, amount float64) error
 	Delete(ctx context.Context, id primitive.ObjectID) error
 	Count(ctx context.Context, branchID primitive.ObjectID) (int64, error)
 }

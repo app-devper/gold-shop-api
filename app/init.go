@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"log"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -101,7 +102,8 @@ func (a App) StartApp() {
 	// Initialize services
 	employeeService := employee.NewService(employeeRepo, branchRepo)
 	branchService := branch.NewService(branchRepo)
-	saleService := sale.NewService(saleRepo, productRepo, productItemRepo, goldPriceRepo, stockLogRepo, customerRepo, branchRepo, nil)
+	txManager := mongo.NewTransactionManager(mongoClient)
+	saleService := sale.NewService(saleRepo, productRepo, productItemRepo, goldPriceRepo, stockLogRepo, customerRepo, branchRepo, nil, txManager)
 	pawnService := pawn.NewService(pawnRepo, branchRepo)
 	goldPriceService := gold_price_app.NewService(goldPriceRepo, goldAPIClient)
 	goldSavingService := gold_saving.NewService(goldSavingRepo, goldPriceRepo, branchRepo)
@@ -136,10 +138,10 @@ func (a App) StartApp() {
 	router.Setup(r, cfg.Auth.SecretKey, sessionRepo, employeeRepo, branchRepo, handlers)
 
 	// Start server
+	srv := &http.Server{Addr: ":" + cfg.Server.Port, Handler: r}
 	go func() {
-		addr := ":" + cfg.Server.Port
-		logrus.Infof("Server starting on %s", addr)
-		if err := r.Run(addr); err != nil {
+		logrus.Infof("Server starting on %s", srv.Addr)
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("Failed to start server: %v", err)
 		}
 	}()
@@ -149,6 +151,13 @@ func (a App) StartApp() {
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 	logrus.Info("Shutting down server...")
+
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer shutdownCancel()
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		logrus.Errorf("Server forced shutdown: %v", err)
+	}
+	logrus.Info("Server exited")
 }
 
 func initializeDefaultData(ctx context.Context, branchRepo interface {

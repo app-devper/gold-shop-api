@@ -13,15 +13,33 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
+// parseDateRange parses from/to date strings (YYYY-MM-DD) and returns a half-open [from, to) time range.
+// If to is empty or invalid, it defaults to from + 1 day.
+func parseDateRange(from, to string) (time.Time, time.Time, error) {
+	fromTime, err := time.Parse("2006-01-02", from)
+	if err != nil {
+		return time.Time{}, time.Time{}, fmt.Errorf("invalid 'from' date: %w", err)
+	}
+	toTime, toErr := time.Parse("2006-01-02", to)
+	if toErr != nil || toTime.IsZero() {
+		toTime = fromTime.Add(24 * time.Hour)
+	} else {
+		toTime = toTime.Add(24 * time.Hour)
+	}
+	return fromTime, toTime, nil
+}
+
 // SaleRepository implements repository.SaleRepository
 type SaleRepository struct {
 	collection *mongo.Collection
+	counter    *CounterRepository
 }
 
 // NewSaleRepository creates a new SaleRepository
 func NewSaleRepository(client *Client) *SaleRepository {
 	return &SaleRepository{
 		collection: client.Collection(CollectionSales),
+		counter:    NewCounterRepository(client),
 	}
 }
 
@@ -114,9 +132,10 @@ func (r *SaleRepository) GetByCustomerID(ctx context.Context, customerID primiti
 
 // GetByDateRange retrieves sales by date range
 func (r *SaleRepository) GetByDateRange(ctx context.Context, branchID primitive.ObjectID, from, to string) ([]*entity.Sale, error) {
-	fromTime, _ := time.Parse("2006-01-02", from)
-	toTime, _ := time.Parse("2006-01-02", to)
-	toTime = toTime.Add(24 * time.Hour) // Include the end date
+	fromTime, toTime, err := parseDateRange(from, to)
+	if err != nil {
+		return nil, err
+	}
 
 	filter := bson.M{
 		"branch_id": branchID,
@@ -153,43 +172,24 @@ func (r *SaleRepository) Update(ctx context.Context, sale *entity.Sale) error {
 	return nil
 }
 
-// GenerateSaleNumber generates a unique sale number
+// GenerateSaleNumber generates a unique sale number using atomic counter
 func (r *SaleRepository) GenerateSaleNumber(ctx context.Context, branchCode string) (string, error) {
 	today := time.Now().Format("20060102")
-	prefix := fmt.Sprintf("%s-%s-", branchCode, today)
+	counterKey := fmt.Sprintf("sale-%s-%s", branchCode, today)
 
-	// Find the latest sale number for today
-	filter := bson.M{
-		"sale_number": bson.M{"$regex": "^" + prefix},
-	}
-	opts := options.FindOne().SetSort(bson.D{{Key: "sale_number", Value: -1}})
-
-	var lastSale entity.Sale
-	err := r.collection.FindOne(ctx, filter, opts).Decode(&lastSale)
-
-	var nextNum int
-	if err == mongo.ErrNoDocuments {
-		nextNum = 1
-	} else if err != nil {
+	nextNum, err := r.counter.NextSequence(ctx, counterKey)
+	if err != nil {
 		return "", err
-	} else {
-		// Extract the number from the last sale number
-		var lastNum int
-		fmt.Sscanf(lastSale.SaleNumber, prefix+"%04d", &lastNum)
-		nextNum = lastNum + 1
 	}
 
-	return fmt.Sprintf("%s%04d", prefix, nextNum), nil
+	return fmt.Sprintf("%s-%s-%04d", branchCode, today, nextNum), nil
 }
 
 // SumByBranchAndDateRange calculates total net sales for a branch and date range
 func (r *SaleRepository) SumByBranchAndDateRange(ctx context.Context, branchID primitive.ObjectID, from, to string) (float64, error) {
-	fromTime, _ := time.Parse("2006-01-02", from)
-	toTime, _ := time.Parse("2006-01-02", to)
-	if !toTime.IsZero() {
-		toTime = toTime.Add(24 * time.Hour)
-	} else {
-		toTime = fromTime.Add(24 * time.Hour)
+	fromTime, toTime, err := parseDateRange(from, to)
+	if err != nil {
+		return 0, err
 	}
 
 	pipeline := mongo.Pipeline{
@@ -225,12 +225,9 @@ func (r *SaleRepository) SumByBranchAndDateRange(ctx context.Context, branchID p
 
 // CountByBranchAndDateRange counts sales for a branch and date range
 func (r *SaleRepository) CountByBranchAndDateRange(ctx context.Context, branchID primitive.ObjectID, from, to string) (int64, error) {
-	fromTime, _ := time.Parse("2006-01-02", from)
-	toTime, _ := time.Parse("2006-01-02", to)
-	if !toTime.IsZero() {
-		toTime = toTime.Add(24 * time.Hour)
-	} else {
-		toTime = fromTime.Add(24 * time.Hour)
+	fromTime, toTime, err := parseDateRange(from, to)
+	if err != nil {
+		return 0, err
 	}
 
 	filter := bson.M{
@@ -244,12 +241,9 @@ func (r *SaleRepository) CountByBranchAndDateRange(ctx context.Context, branchID
 
 // SumCostByBranchAndDateRange calculates total cost of goods sold
 func (r *SaleRepository) SumCostByBranchAndDateRange(ctx context.Context, branchID primitive.ObjectID, from, to string) (float64, error) {
-	fromTime, _ := time.Parse("2006-01-02", from)
-	toTime, _ := time.Parse("2006-01-02", to)
-	if !toTime.IsZero() {
-		toTime = toTime.Add(24 * time.Hour)
-	} else {
-		toTime = fromTime.Add(24 * time.Hour)
+	fromTime, toTime, err := parseDateRange(from, to)
+	if err != nil {
+		return 0, err
 	}
 
 	pipeline := mongo.Pipeline{
@@ -265,12 +259,6 @@ func (r *SaleRepository) SumCostByBranchAndDateRange(ctx context.Context, branch
 			"total": bson.M{"$sum": "$items.cost"}, // Note: Need to check if SaleItem has Cost field
 		}}},
 	}
-
-	// Wait, I need to check SaleItem entity to see if it has Cost.
-	// Actually, Sale entity might not have cost in items. Let's check sale.go.
-	// If it doesn't, I'll need to join with products or store cost in SaleItem at creation.
-	// Looking at SaleItem in entity/sale.go... it does NOT have Cost.
-	// I should probably add Cost to SaleItem so it's captured at point of sale.
 
 	cursor, err := r.collection.Aggregate(ctx, pipeline)
 	if err != nil {
@@ -296,7 +284,7 @@ func (r *SaleRepository) GetUnpaidByBranchID(ctx context.Context, branchID primi
 	pipeline := mongo.Pipeline{
 		{{Key: "$match", Value: bson.M{
 			"branch_id": branchID,
-			"status":    entity.SaleStatusCompleted,
+			"status":    bson.M{"$in": []entity.SaleStatus{entity.SaleStatusPending, entity.SaleStatusCompleted}},
 		}}},
 		{{Key: "$addFields", Value: bson.M{
 			"total_paid": bson.M{"$sum": "$payments.amount"},
@@ -321,12 +309,9 @@ func (r *SaleRepository) GetUnpaidByBranchID(ctx context.Context, branchID primi
 
 // GetTopSellingProducts retrieves top selling products based on quantity
 func (r *SaleRepository) GetTopSellingProducts(ctx context.Context, branchID primitive.ObjectID, from, to string, limit int) ([]repository.TopProduct, error) {
-	fromTime, _ := time.Parse("2006-01-02", from)
-	toTime, _ := time.Parse("2006-01-02", to)
-	if !toTime.IsZero() {
-		toTime = toTime.Add(24 * time.Hour)
-	} else {
-		toTime = fromTime.Add(24 * time.Hour)
+	fromTime, toTime, err := parseDateRange(from, to)
+	if err != nil {
+		return nil, err
 	}
 
 	pipeline := mongo.Pipeline{
@@ -361,12 +346,9 @@ func (r *SaleRepository) GetTopSellingProducts(ctx context.Context, branchID pri
 
 // GetEmployeePerformance retrieves sales performance per employee
 func (r *SaleRepository) GetEmployeePerformance(ctx context.Context, branchID primitive.ObjectID, from, to string) ([]repository.EmployeePerformance, error) {
-	fromTime, _ := time.Parse("2006-01-02", from)
-	toTime, _ := time.Parse("2006-01-02", to)
-	if !toTime.IsZero() {
-		toTime = toTime.Add(24 * time.Hour)
-	} else {
-		toTime = fromTime.Add(24 * time.Hour)
+	fromTime, toTime, err := parseDateRange(from, to)
+	if err != nil {
+		return nil, err
 	}
 
 	pipeline := mongo.Pipeline{
@@ -387,10 +369,13 @@ func (r *SaleRepository) GetEmployeePerformance(ctx context.Context, branchID pr
 			"foreignField": "_id",
 			"as":           "user",
 		}}},
-		{{Key: "$unwind", Value: "$user"}},
+		{{Key: "$unwind", Value: bson.M{
+			"path":                       "$user",
+			"preserveNullAndEmptyArrays": true,
+		}}},
 		{{Key: "$project", Value: bson.M{
 			"_id":            1,
-			"full_name":      "$user.full_name",
+			"full_name":      bson.M{"$ifNull": []interface{}{"$user.full_name", "Unknown"}},
 			"total_sales":    1,
 			"sale_count":     1,
 			"avg_sale_value": 1,
@@ -412,12 +397,9 @@ func (r *SaleRepository) GetEmployeePerformance(ctx context.Context, branchID pr
 
 // GetSalesTrends retrieves daily sales trends
 func (r *SaleRepository) GetSalesTrends(ctx context.Context, branchID primitive.ObjectID, from, to string) ([]repository.SalesTrend, error) {
-	fromTime, _ := time.Parse("2006-01-02", from)
-	toTime, _ := time.Parse("2006-01-02", to)
-	if !toTime.IsZero() {
-		toTime = toTime.Add(24 * time.Hour)
-	} else {
-		toTime = fromTime.Add(24 * time.Hour)
+	fromTime, toTime, err := parseDateRange(from, to)
+	if err != nil {
+		return nil, err
 	}
 
 	pipeline := mongo.Pipeline{

@@ -15,12 +15,14 @@ import (
 // PawnRepository implements repository.PawnRepository
 type PawnRepository struct {
 	collection *mongo.Collection
+	counter    *CounterRepository
 }
 
 // NewPawnRepository creates a new PawnRepository
 func NewPawnRepository(client *Client) *PawnRepository {
 	return &PawnRepository{
 		collection: client.Collection(CollectionPawns),
+		counter:    NewCounterRepository(client),
 	}
 }
 
@@ -169,31 +171,17 @@ func (r *PawnRepository) Update(ctx context.Context, pawn *entity.Pawn) error {
 	return nil
 }
 
-// GeneratePawnNumber generates a unique pawn number
+// GeneratePawnNumber generates a unique pawn number using atomic counter
 func (r *PawnRepository) GeneratePawnNumber(ctx context.Context, branchCode string) (string, error) {
 	today := time.Now().Format("20060102")
-	prefix := fmt.Sprintf("P-%s-%s-", branchCode, today)
+	counterKey := fmt.Sprintf("pawn-%s-%s", branchCode, today)
 
-	filter := bson.M{
-		"pawn_number": bson.M{"$regex": "^" + prefix},
-	}
-	opts := options.FindOne().SetSort(bson.D{{Key: "pawn_number", Value: -1}})
-
-	var lastPawn entity.Pawn
-	err := r.collection.FindOne(ctx, filter, opts).Decode(&lastPawn)
-
-	var nextNum int
-	if err == mongo.ErrNoDocuments {
-		nextNum = 1
-	} else if err != nil {
+	nextNum, err := r.counter.NextSequence(ctx, counterKey)
+	if err != nil {
 		return "", err
-	} else {
-		var lastNum int
-		fmt.Sscanf(lastPawn.PawnNumber, prefix+"%04d", &lastNum)
-		nextNum = lastNum + 1
 	}
 
-	return fmt.Sprintf("%s%04d", prefix, nextNum), nil
+	return fmt.Sprintf("P-%s-%s-%04d", branchCode, today, nextNum), nil
 }
 
 // CountByStatus counts pawns by status
@@ -207,12 +195,9 @@ func (r *PawnRepository) CountByStatus(ctx context.Context, branchID primitive.O
 
 // SumInterestByBranchAndDateRange calculates total interest collected
 func (r *PawnRepository) SumInterestByBranchAndDateRange(ctx context.Context, branchID primitive.ObjectID, from, to string) (float64, error) {
-	fromTime, _ := time.Parse("2006-01-02", from)
-	toTime, _ := time.Parse("2006-01-02", to)
-	if !toTime.IsZero() {
-		toTime = toTime.Add(24 * time.Hour)
-	} else {
-		toTime = fromTime.Add(24 * time.Hour)
+	fromTime, toTime, err := parseDateRange(from, to)
+	if err != nil {
+		return 0, err
 	}
 
 	// Sum interest from redemptions
@@ -242,28 +227,36 @@ func (r *PawnRepository) SumInterestByBranchAndDateRange(ctx context.Context, br
 
 	var total float64
 
-	// Ejecuta redenciones
 	cursorR, err := r.collection.Aggregate(ctx, redemptionPipeline)
-	if err == nil {
-		var resR []struct {
-			Total float64 `bson:"total"`
-		}
-		if err := cursorR.All(ctx, &resR); err == nil && len(resR) > 0 {
-			total += resR[0].Total
-		}
+	if err != nil {
+		return 0, fmt.Errorf("failed to aggregate redemption interest: %w", err)
+	}
+	var resR []struct {
+		Total float64 `bson:"total"`
+	}
+	if err := cursorR.All(ctx, &resR); err != nil {
 		cursorR.Close(ctx)
+		return 0, fmt.Errorf("failed to decode redemption interest: %w", err)
+	}
+	cursorR.Close(ctx)
+	if len(resR) > 0 {
+		total += resR[0].Total
 	}
 
-	// Ejecuta pagos de intereses
 	cursorP, err := r.collection.Aggregate(ctx, paymentsPipeline)
-	if err == nil {
-		var resP []struct {
-			Total float64 `bson:"total"`
-		}
-		if err := cursorP.All(ctx, &resP); err == nil && len(resP) > 0 {
-			total += resP[0].Total
-		}
+	if err != nil {
+		return 0, fmt.Errorf("failed to aggregate interest payments: %w", err)
+	}
+	var resP []struct {
+		Total float64 `bson:"total"`
+	}
+	if err := cursorP.All(ctx, &resP); err != nil {
 		cursorP.Close(ctx)
+		return 0, fmt.Errorf("failed to decode interest payments: %w", err)
+	}
+	cursorP.Close(ctx)
+	if len(resP) > 0 {
+		total += resP[0].Total
 	}
 
 	return total, nil

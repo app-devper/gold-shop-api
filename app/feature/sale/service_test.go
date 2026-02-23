@@ -28,7 +28,8 @@ func TestCreateSale(t *testing.T) {
 		mockPriceRepo := new(testutils.MockGoldPriceRepository)
 		mockStockLogRepo := new(testutils.MockStockLogRepository)
 
-		service := NewService(mockSaleRepo, mockProductRepo, mockItemRepo, mockPriceRepo, mockStockLogRepo, mockCustomerRepo, mockBranchRepo, mockUserRepo)
+		mockTxManager := new(testutils.MockTransactionManager)
+		service := NewService(mockSaleRepo, mockProductRepo, mockItemRepo, mockPriceRepo, mockStockLogRepo, mockCustomerRepo, mockBranchRepo, mockUserRepo, mockTxManager)
 
 		mockPriceRepo.On("GetCurrent", ctx).Return(&entity.GoldPrice{
 			GoldBarBuy:       30000,
@@ -112,7 +113,7 @@ func TestCreateSale(t *testing.T) {
 	t.Run("BranchNotFound", func(t *testing.T) {
 		branchID := primitive.NewObjectID()
 		mockBranchRepo := new(testutils.MockBranchRepository)
-		service := NewService(nil, nil, nil, nil, nil, nil, mockBranchRepo, nil)
+		service := NewService(nil, nil, nil, nil, nil, nil, mockBranchRepo, nil, new(testutils.MockTransactionManager))
 
 		mockBranchRepo.On("GetByID", ctx, branchID).Return(nil, nil).Once()
 
@@ -137,7 +138,7 @@ func TestGenerateReceipt(t *testing.T) {
 	mockBranchRepo := new(testutils.MockBranchRepository)
 	mockUserRepo := new(testutils.MockUserRepository)
 
-	service := NewService(mockSaleRepo, mockProductRepo, nil, nil, nil, mockCustomerRepo, mockBranchRepo, mockUserRepo)
+	service := NewService(mockSaleRepo, mockProductRepo, nil, nil, nil, mockCustomerRepo, mockBranchRepo, mockUserRepo, new(testutils.MockTransactionManager))
 
 	t.Run("Success", func(t *testing.T) {
 		sale := &entity.Sale{

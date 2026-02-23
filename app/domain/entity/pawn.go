@@ -145,7 +145,7 @@ func (p *Pawn) Redeem(interest, discount float64, receivedBy primitive.ObjectID)
 func (p *Pawn) Extend(additionalMonths int) {
 	p.DueDate = p.DueDate.AddDate(0, additionalMonths, 0)
 	p.TermMonths += additionalMonths
-	p.Status = PawnStatusExtended
+	p.Status = PawnStatusActive
 	p.UpdatedAt = time.Now()
 }
 
