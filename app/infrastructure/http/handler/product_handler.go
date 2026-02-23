@@ -22,13 +22,13 @@ func NewProductHandler(service *product.Service) *ProductHandler {
 func (h *ProductHandler) CreateProduct(c *gin.Context) {
 	var req product.CreateProductRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		utils.BadRequestResponse(c, err.Error())
+		utils.BadRequestResponse(c, "PRD-400-001", err.Error())
 		return
 	}
 
 	product, err := h.service.CreateProduct(c.Request.Context(), &req)
 	if err != nil {
-		utils.InternalErrorResponse(c, err.Error())
+		utils.InternalErrorResponse(c, "PRD-500-001", err.Error())
 		return
 	}
 
@@ -40,7 +40,7 @@ func (h *ProductHandler) GetProduct(c *gin.Context) {
 	id := c.Param("id")
 	product, err := h.service.GetProduct(c.Request.Context(), id)
 	if err != nil {
-		utils.NotFoundResponse(c, err.Error())
+		utils.NotFoundResponse(c, "PRD-404-001", err.Error())
 		return
 	}
 
@@ -65,7 +65,7 @@ func (h *ProductHandler) GetProducts(c *gin.Context) {
 
 	products, err := h.service.GetProducts(c.Request.Context(), branchID, status, limit, offset)
 	if err != nil {
-		utils.InternalErrorResponse(c, err.Error())
+		utils.InternalErrorResponse(c, "PRD-500-002", err.Error())
 		return
 	}
 
@@ -77,13 +77,13 @@ func (h *ProductHandler) UpdateProduct(c *gin.Context) {
 	id := c.Param("id")
 	var req product.UpdateProductRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		utils.BadRequestResponse(c, err.Error())
+		utils.BadRequestResponse(c, "PRD-400-002", err.Error())
 		return
 	}
 
 	product, err := h.service.UpdateProduct(c.Request.Context(), id, &req)
 	if err != nil {
-		utils.InternalErrorResponse(c, err.Error())
+		utils.InternalErrorResponse(c, "PRD-500-003", err.Error())
 		return
 	}
 
@@ -94,7 +94,7 @@ func (h *ProductHandler) UpdateProduct(c *gin.Context) {
 func (h *ProductHandler) DeleteProduct(c *gin.Context) {
 	id := c.Param("id")
 	if err := h.service.DeleteProduct(c.Request.Context(), id); err != nil {
-		utils.InternalErrorResponse(c, err.Error())
+		utils.InternalErrorResponse(c, "PRD-500-004", err.Error())
 		return
 	}
 
@@ -111,13 +111,13 @@ type CreateCategoryRequest struct {
 func (h *ProductHandler) CreateCategory(c *gin.Context) {
 	var req CreateCategoryRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		utils.BadRequestResponse(c, err.Error())
+		utils.BadRequestResponse(c, "PRD-400-003", err.Error())
 		return
 	}
 
 	category, err := h.service.CreateCategory(c.Request.Context(), req.Name, req.Code, req.Description)
 	if err != nil {
-		utils.InternalErrorResponse(c, err.Error())
+		utils.InternalErrorResponse(c, "PRD-500-005", err.Error())
 		return
 	}
 
@@ -128,7 +128,7 @@ func (h *ProductHandler) CreateCategory(c *gin.Context) {
 func (h *ProductHandler) GetCategories(c *gin.Context) {
 	categories, err := h.service.GetCategories(c.Request.Context())
 	if err != nil {
-		utils.InternalErrorResponse(c, err.Error())
+		utils.InternalErrorResponse(c, "PRD-500-006", err.Error())
 		return
 	}
 

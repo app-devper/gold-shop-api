@@ -3,8 +3,8 @@ package handler
 import (
 	"time"
 
-	"github.com/devper-gold/gold-shop-api/app/feature/reward"
 	"github.com/devper-gold/gold-shop-api/app/domain/entity"
+	"github.com/devper-gold/gold-shop-api/app/feature/reward"
 	"github.com/devper-gold/gold-shop-api/pkg/utils"
 	"github.com/gin-gonic/gin"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -22,7 +22,7 @@ func (h *RewardHandler) GetRewards(c *gin.Context) {
 	onlyActive := c.Query("active") == "true"
 	rewards, err := h.service.GetRewards(c.Request.Context(), onlyActive)
 	if err != nil {
-		utils.InternalErrorResponse(c, err.Error())
+		utils.InternalErrorResponse(c, "RWD-500-001", err.Error())
 		return
 	}
 	utils.SuccessResponse(c, rewards)
@@ -40,13 +40,13 @@ func (h *RewardHandler) CreateReward(c *gin.Context) {
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		utils.BadRequestResponse(c, err.Error())
+		utils.BadRequestResponse(c, "RWD-400-001", err.Error())
 		return
 	}
 
 	reward := entity.NewReward(req.Code, req.Name, req.Description, req.PointsRequired, req.Quantity, req.ValidFrom, req.ValidUntil)
 	if err := h.service.CreateReward(c.Request.Context(), reward); err != nil {
-		utils.InternalErrorResponse(c, err.Error())
+		utils.InternalErrorResponse(c, "RWD-500-002", err.Error())
 		return
 	}
 
@@ -61,7 +61,7 @@ func (h *RewardHandler) RedeemReward(c *gin.Context) {
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		utils.BadRequestResponse(c, err.Error())
+		utils.BadRequestResponse(c, "RWD-400-002", err.Error())
 		return
 	}
 
@@ -72,7 +72,7 @@ func (h *RewardHandler) RedeemReward(c *gin.Context) {
 
 	redemption, err := h.service.RedeemReward(c.Request.Context(), custOID, rewOID, brOID, processedBy)
 	if err != nil {
-		utils.InternalErrorResponse(c, err.Error())
+		utils.InternalErrorResponse(c, "RWD-500-003", err.Error())
 		return
 	}
 

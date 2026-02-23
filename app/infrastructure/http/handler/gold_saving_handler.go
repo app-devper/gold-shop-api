@@ -1,8 +1,8 @@
 package handler
 
 import (
-	"github.com/devper-gold/gold-shop-api/app/feature/gold_saving"
 	"github.com/devper-gold/gold-shop-api/app/domain/entity"
+	"github.com/devper-gold/gold-shop-api/app/feature/gold_saving"
 	"github.com/devper-gold/gold-shop-api/pkg/utils"
 	"github.com/gin-gonic/gin"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -50,7 +50,7 @@ func (h *GoldSavingHandler) List(c *gin.Context) {
 
 	accounts, err := h.goldSavingService.GetByBranchID(c.Request.Context(), branchID, status)
 	if err != nil {
-		utils.InternalErrorResponse(c, "Failed to fetch accounts")
+		utils.InternalErrorResponse(c, "GLS-500-001", "Failed to fetch accounts")
 		return
 	}
 
@@ -61,17 +61,17 @@ func (h *GoldSavingHandler) List(c *gin.Context) {
 func (h *GoldSavingHandler) Get(c *gin.Context) {
 	id, err := primitive.ObjectIDFromHex(c.Param("id"))
 	if err != nil {
-		utils.BadRequestResponse(c, "Invalid account ID")
+		utils.BadRequestResponse(c, "GLS-400-001", "Invalid account ID")
 		return
 	}
 
 	account, err := h.goldSavingService.GetByID(c.Request.Context(), id)
 	if err != nil {
 		if err == entity.ErrNotFound {
-			utils.NotFoundResponse(c, "Account not found")
+			utils.NotFoundResponse(c, "GLS-404-001", "Account not found")
 			return
 		}
-		utils.InternalErrorResponse(c, "Failed to fetch account")
+		utils.InternalErrorResponse(c, "GLS-500-002", "Failed to fetch account")
 		return
 	}
 
@@ -82,7 +82,7 @@ func (h *GoldSavingHandler) Get(c *gin.Context) {
 func (h *GoldSavingHandler) OpenAccount(c *gin.Context) {
 	var req OpenAccountRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		utils.BadRequestResponse(c, "Invalid request body")
+		utils.BadRequestResponse(c, "GLS-400-002", "Invalid request body")
 		return
 	}
 
@@ -98,7 +98,7 @@ func (h *GoldSavingHandler) OpenAccount(c *gin.Context) {
 		req.MinWithdrawal,
 	)
 	if err != nil {
-		utils.BadRequestResponse(c, err.Error())
+		utils.BadRequestResponse(c, "GLS-400-003", err.Error())
 		return
 	}
 
@@ -109,13 +109,13 @@ func (h *GoldSavingHandler) OpenAccount(c *gin.Context) {
 func (h *GoldSavingHandler) Deposit(c *gin.Context) {
 	id, err := primitive.ObjectIDFromHex(c.Param("id"))
 	if err != nil {
-		utils.BadRequestResponse(c, "Invalid account ID")
+		utils.BadRequestResponse(c, "GLS-400-004", "Invalid account ID")
 		return
 	}
 
 	var req DepositRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		utils.BadRequestResponse(c, "Invalid request body")
+		utils.BadRequestResponse(c, "GLS-400-005", "Invalid request body")
 		return
 	}
 
@@ -123,7 +123,7 @@ func (h *GoldSavingHandler) Deposit(c *gin.Context) {
 
 	account, err := h.goldSavingService.Deposit(c.Request.Context(), id, req.Amount, userID)
 	if err != nil {
-		utils.BadRequestResponse(c, err.Error())
+		utils.BadRequestResponse(c, "GLS-400-006", err.Error())
 		return
 	}
 
@@ -134,13 +134,13 @@ func (h *GoldSavingHandler) Deposit(c *gin.Context) {
 func (h *GoldSavingHandler) Withdraw(c *gin.Context) {
 	id, err := primitive.ObjectIDFromHex(c.Param("id"))
 	if err != nil {
-		utils.BadRequestResponse(c, "Invalid account ID")
+		utils.BadRequestResponse(c, "GLS-400-007", "Invalid account ID")
 		return
 	}
 
 	var req WithdrawRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		utils.BadRequestResponse(c, "Invalid request body")
+		utils.BadRequestResponse(c, "GLS-400-008", "Invalid request body")
 		return
 	}
 
@@ -148,7 +148,7 @@ func (h *GoldSavingHandler) Withdraw(c *gin.Context) {
 
 	account, err := h.goldSavingService.Withdraw(c.Request.Context(), id, req.Amount, req.AsCash, userID)
 	if err != nil {
-		utils.BadRequestResponse(c, err.Error())
+		utils.BadRequestResponse(c, "GLS-400-009", err.Error())
 		return
 	}
 
@@ -159,13 +159,13 @@ func (h *GoldSavingHandler) Withdraw(c *gin.Context) {
 func (h *GoldSavingHandler) Close(c *gin.Context) {
 	id, err := primitive.ObjectIDFromHex(c.Param("id"))
 	if err != nil {
-		utils.BadRequestResponse(c, "Invalid account ID")
+		utils.BadRequestResponse(c, "GLS-400-010", "Invalid account ID")
 		return
 	}
 
 	account, err := h.goldSavingService.Close(c.Request.Context(), id)
 	if err != nil {
-		utils.BadRequestResponse(c, err.Error())
+		utils.BadRequestResponse(c, "GLS-400-011", err.Error())
 		return
 	}
 
@@ -176,13 +176,13 @@ func (h *GoldSavingHandler) Close(c *gin.Context) {
 func (h *GoldSavingHandler) GetStatement(c *gin.Context) {
 	id, err := primitive.ObjectIDFromHex(c.Param("id"))
 	if err != nil {
-		utils.BadRequestResponse(c, "Invalid account ID")
+		utils.BadRequestResponse(c, "GLS-400-012", "Invalid account ID")
 		return
 	}
 
 	statement, err := h.goldSavingService.GetStatement(c.Request.Context(), id)
 	if err != nil {
-		utils.InternalErrorResponse(c, "Failed to generate statement")
+		utils.InternalErrorResponse(c, "GLS-500-003", "Failed to generate statement")
 		return
 	}
 

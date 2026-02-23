@@ -1,8 +1,8 @@
 package handler
 
 import (
-	"github.com/devper-gold/gold-shop-api/app/feature/gold_price"
 	"github.com/devper-gold/gold-shop-api/app/domain/entity"
+	"github.com/devper-gold/gold-shop-api/app/feature/gold_price"
 	"github.com/devper-gold/gold-shop-api/pkg/utils"
 	"github.com/gin-gonic/gin"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -33,10 +33,10 @@ func (h *GoldPriceHandler) GetCurrent(c *gin.Context) {
 	price, err := h.goldPriceService.GetCurrent(c.Request.Context())
 	if err != nil {
 		if err == entity.ErrNotFound {
-			utils.NotFoundResponse(c, "No gold price set")
+			utils.NotFoundResponse(c, "GLP-404-001", "No gold price set")
 			return
 		}
-		utils.InternalErrorResponse(c, "Failed to fetch gold price")
+		utils.InternalErrorResponse(c, "GLP-500-001", "Failed to fetch gold price")
 		return
 	}
 
@@ -47,7 +47,7 @@ func (h *GoldPriceHandler) GetCurrent(c *gin.Context) {
 func (h *GoldPriceHandler) GetHistory(c *gin.Context) {
 	prices, err := h.goldPriceService.GetHistory(c.Request.Context(), 30)
 	if err != nil {
-		utils.InternalErrorResponse(c, "Failed to fetch price history")
+		utils.InternalErrorResponse(c, "GLP-500-002", "Failed to fetch price history")
 		return
 	}
 
@@ -58,7 +58,7 @@ func (h *GoldPriceHandler) GetHistory(c *gin.Context) {
 func (h *GoldPriceHandler) SetPrice(c *gin.Context) {
 	var req SetPriceRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		utils.BadRequestResponse(c, "Invalid request body")
+		utils.BadRequestResponse(c, "GLP-400-001", "Invalid request body")
 		return
 	}
 
@@ -73,7 +73,7 @@ func (h *GoldPriceHandler) SetPrice(c *gin.Context) {
 		userID,
 	)
 	if err != nil {
-		utils.InternalErrorResponse(c, "Failed to set gold price")
+		utils.InternalErrorResponse(c, "GLP-500-003", "Failed to set gold price")
 		return
 	}
 
@@ -84,7 +84,7 @@ func (h *GoldPriceHandler) SetPrice(c *gin.Context) {
 func (h *GoldPriceHandler) SyncFromAPI(c *gin.Context) {
 	price, err := h.goldPriceService.SyncFromAPI(c.Request.Context())
 	if err != nil {
-		utils.InternalErrorResponse(c, "Failed to sync gold price from API")
+		utils.InternalErrorResponse(c, "GLP-500-004", "Failed to sync gold price from API")
 		return
 	}
 

@@ -32,7 +32,7 @@ func RequireAuthenticated(secretKey string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		token := c.GetHeader("Authorization")
 		if !strings.HasPrefix(token, "Bearer ") {
-			utils.UnauthorizedResponse(c, "missing authorization header")
+			utils.UnauthorizedResponse(c, "AUT-401-001", "missing authorization header")
 			c.Abort()
 			return
 		}
@@ -45,12 +45,12 @@ func RequireAuthenticated(secretKey string) gin.HandlerFunc {
 			return jwtKey, nil
 		})
 		if err != nil {
-			utils.UnauthorizedResponse(c, "token invalid")
+			utils.UnauthorizedResponse(c, "AUT-401-002", "token invalid")
 			c.Abort()
 			return
 		}
 		if tkn == nil || !tkn.Valid || claims.Id == "" {
-			utils.UnauthorizedResponse(c, "token invalid")
+			utils.UnauthorizedResponse(c, "AUT-401-003", "token invalid")
 			c.Abort()
 			return
 		}
@@ -72,7 +72,7 @@ func RequireSession(sessionRepo SessionLookup) gin.HandlerFunc {
 		sessionId := c.GetString("SessionId")
 		userId, err := sessionRepo.GetSessionById(c.Request.Context(), sessionId)
 		if err != nil {
-			utils.UnauthorizedResponse(c, "session invalid")
+			utils.UnauthorizedResponse(c, "AUT-401-004", "session invalid")
 			c.Abort()
 			return
 		}
@@ -91,13 +91,13 @@ func RequireBranch(employeeRepo repository.EmployeeRepository, branchRepo reposi
 		employee, err := employeeRepo.GetByUserID(ctx, userId)
 		if err != nil {
 			if err != entity.ErrNotFound {
-				utils.InternalErrorResponse(c, "failed to resolve employee")
+				utils.InternalErrorResponse(c, "AUT-500-001", "failed to resolve employee")
 				c.Abort()
 				return
 			}
 			defaultBranch, bErr := branchRepo.GetByCode(ctx, "HQ")
 			if bErr != nil {
-				utils.ForbiddenResponse(c, "no branch available")
+				utils.ForbiddenResponse(c, "AUT-403-001", "no branch available")
 				c.Abort()
 				return
 			}
@@ -118,7 +118,7 @@ func RoleMiddleware(allowedRoles ...entity.EmployeeRole) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		role := c.GetString("EmployeeRole")
 		if role == "" {
-			utils.ForbiddenResponse(c, "Invalid request, restricted endpoint")
+			utils.ForbiddenResponse(c, "AUT-403-002", "Invalid request, restricted endpoint")
 			c.Abort()
 			return
 		}
@@ -128,7 +128,7 @@ func RoleMiddleware(allowedRoles ...entity.EmployeeRole) gin.HandlerFunc {
 				return
 			}
 		}
-		utils.ForbiddenResponse(c, "Don't have permission")
+		utils.ForbiddenResponse(c, "AUT-403-003", "Don't have permission")
 		c.Abort()
 	}
 }
@@ -137,7 +137,7 @@ func RequireRole(allowedRoles ...entity.UMRole) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		role := c.GetString("Role")
 		if role == "" {
-			utils.ForbiddenResponse(c, "Invalid request, restricted endpoint")
+			utils.ForbiddenResponse(c, "AUT-403-004", "Invalid request, restricted endpoint")
 			c.Abort()
 			return
 		}
@@ -147,7 +147,7 @@ func RequireRole(allowedRoles ...entity.UMRole) gin.HandlerFunc {
 				return
 			}
 		}
-		utils.ForbiddenResponse(c, "Don't have um permission")
+		utils.ForbiddenResponse(c, "AUT-403-005", "Don't have um permission")
 		c.Abort()
 	}
 }

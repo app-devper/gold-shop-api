@@ -3,8 +3,8 @@ package handler
 import (
 	"strconv"
 
-	"github.com/devper-gold/gold-shop-api/app/feature/pawn"
 	"github.com/devper-gold/gold-shop-api/app/domain/entity"
+	"github.com/devper-gold/gold-shop-api/app/feature/pawn"
 	"github.com/devper-gold/gold-shop-api/pkg/utils"
 	"github.com/gin-gonic/gin"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -69,7 +69,7 @@ func (h *PawnHandler) List(c *gin.Context) {
 
 	pawns, err := h.pawnService.GetByBranchID(c.Request.Context(), branchID, status, limit, offset)
 	if err != nil {
-		utils.InternalErrorResponse(c, "Failed to fetch pawns")
+		utils.InternalErrorResponse(c, "PWN-500-001", "Failed to fetch pawns")
 		return
 	}
 
@@ -80,17 +80,17 @@ func (h *PawnHandler) List(c *gin.Context) {
 func (h *PawnHandler) Get(c *gin.Context) {
 	id, err := primitive.ObjectIDFromHex(c.Param("id"))
 	if err != nil {
-		utils.BadRequestResponse(c, "Invalid pawn ID")
+		utils.BadRequestResponse(c, "PWN-400-001", "Invalid pawn ID")
 		return
 	}
 
 	pawnEntity, err := h.pawnService.GetByID(c.Request.Context(), id)
 	if err != nil {
 		if err == entity.ErrNotFound {
-			utils.NotFoundResponse(c, "Pawn not found")
+			utils.NotFoundResponse(c, "PWN-404-001", "Pawn not found")
 			return
 		}
-		utils.InternalErrorResponse(c, "Failed to fetch pawn")
+		utils.InternalErrorResponse(c, "PWN-500-002", "Failed to fetch pawn")
 		return
 	}
 
@@ -101,7 +101,7 @@ func (h *PawnHandler) Get(c *gin.Context) {
 func (h *PawnHandler) Create(c *gin.Context) {
 	var req CreatePawnRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		utils.BadRequestResponse(c, "Invalid request body")
+		utils.BadRequestResponse(c, "PWN-400-002", "Invalid request body")
 		return
 	}
 
@@ -131,7 +131,7 @@ func (h *PawnHandler) Create(c *gin.Context) {
 
 	pawnEntity, err := h.pawnService.Create(c.Request.Context(), input)
 	if err != nil {
-		utils.BadRequestResponse(c, err.Error())
+		utils.BadRequestResponse(c, "PWN-400-003", err.Error())
 		return
 	}
 
@@ -142,13 +142,13 @@ func (h *PawnHandler) Create(c *gin.Context) {
 func (h *PawnHandler) PayInterest(c *gin.Context) {
 	id, err := primitive.ObjectIDFromHex(c.Param("id"))
 	if err != nil {
-		utils.BadRequestResponse(c, "Invalid pawn ID")
+		utils.BadRequestResponse(c, "PWN-400-004", "Invalid pawn ID")
 		return
 	}
 
 	var req PayInterestRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		utils.BadRequestResponse(c, "Invalid request body")
+		utils.BadRequestResponse(c, "PWN-400-005", "Invalid request body")
 		return
 	}
 
@@ -156,7 +156,7 @@ func (h *PawnHandler) PayInterest(c *gin.Context) {
 
 	pawnEntity, err := h.pawnService.PayInterest(c.Request.Context(), id, req.Amount, userID)
 	if err != nil {
-		utils.BadRequestResponse(c, err.Error())
+		utils.BadRequestResponse(c, "PWN-400-006", err.Error())
 		return
 	}
 
@@ -167,13 +167,13 @@ func (h *PawnHandler) PayInterest(c *gin.Context) {
 func (h *PawnHandler) Redeem(c *gin.Context) {
 	id, err := primitive.ObjectIDFromHex(c.Param("id"))
 	if err != nil {
-		utils.BadRequestResponse(c, "Invalid pawn ID")
+		utils.BadRequestResponse(c, "PWN-400-007", "Invalid pawn ID")
 		return
 	}
 
 	var req RedeemRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		utils.BadRequestResponse(c, "Invalid request body")
+		utils.BadRequestResponse(c, "PWN-400-008", "Invalid request body")
 		return
 	}
 
@@ -181,7 +181,7 @@ func (h *PawnHandler) Redeem(c *gin.Context) {
 
 	pawnEntity, err := h.pawnService.Redeem(c.Request.Context(), id, req.Interest, req.Discount, userID)
 	if err != nil {
-		utils.BadRequestResponse(c, err.Error())
+		utils.BadRequestResponse(c, "PWN-400-009", err.Error())
 		return
 	}
 
@@ -192,7 +192,7 @@ func (h *PawnHandler) Redeem(c *gin.Context) {
 func (h *PawnHandler) Extend(c *gin.Context) {
 	id, err := primitive.ObjectIDFromHex(c.Param("id"))
 	if err != nil {
-		utils.BadRequestResponse(c, "Invalid pawn ID")
+		utils.BadRequestResponse(c, "PWN-400-010", "Invalid pawn ID")
 		return
 	}
 
@@ -200,13 +200,13 @@ func (h *PawnHandler) Extend(c *gin.Context) {
 		AdditionalMonths int `json:"additional_months" binding:"required"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		utils.BadRequestResponse(c, "Invalid request body")
+		utils.BadRequestResponse(c, "PWN-400-011", "Invalid request body")
 		return
 	}
 
 	pawnEntity, err := h.pawnService.Extend(c.Request.Context(), id, req.AdditionalMonths)
 	if err != nil {
-		utils.BadRequestResponse(c, err.Error())
+		utils.BadRequestResponse(c, "PWN-400-012", err.Error())
 		return
 	}
 
@@ -217,13 +217,13 @@ func (h *PawnHandler) Extend(c *gin.Context) {
 func (h *PawnHandler) Forfeit(c *gin.Context) {
 	id, err := primitive.ObjectIDFromHex(c.Param("id"))
 	if err != nil {
-		utils.BadRequestResponse(c, "Invalid pawn ID")
+		utils.BadRequestResponse(c, "PWN-400-013", "Invalid pawn ID")
 		return
 	}
 
 	pawnEntity, err := h.pawnService.Forfeit(c.Request.Context(), id)
 	if err != nil {
-		utils.BadRequestResponse(c, err.Error())
+		utils.BadRequestResponse(c, "PWN-400-014", err.Error())
 		return
 	}
 
@@ -237,7 +237,7 @@ func (h *PawnHandler) GetDueSoon(c *gin.Context) {
 
 	pawns, err := h.pawnService.GetDueSoon(c.Request.Context(), branchID, days)
 	if err != nil {
-		utils.InternalErrorResponse(c, "Failed to fetch pawns")
+		utils.InternalErrorResponse(c, "PWN-500-003", "Failed to fetch pawns")
 		return
 	}
 

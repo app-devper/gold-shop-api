@@ -30,13 +30,13 @@ func (h *ReportHandler) GetDashboardData(c *gin.Context) {
 	}
 
 	if branchID.IsZero() {
-		utils.BadRequestResponse(c, "Branch ID is required")
+		utils.BadRequestResponse(c, "REP-400-001", "Branch ID is required")
 		return
 	}
 
 	data, err := h.reportService.GetDashboardData(c.Request.Context(), branchID)
 	if err != nil {
-		utils.InternalErrorResponse(c, err.Error())
+		utils.InternalErrorResponse(c, "REP-500-001", err.Error())
 		return
 	}
 
@@ -51,7 +51,7 @@ func (h *ReportHandler) GetProfitLossReport(c *gin.Context) {
 	}
 
 	if branchID.IsZero() {
-		utils.BadRequestResponse(c, "Branch ID is required")
+		utils.BadRequestResponse(c, "REP-400-002", "Branch ID is required")
 		return
 	}
 
@@ -59,13 +59,13 @@ func (h *ReportHandler) GetProfitLossReport(c *gin.Context) {
 	to := c.Query("to")
 
 	if from == "" || to == "" {
-		utils.BadRequestResponse(c, "Date range (from, to) is required")
+		utils.BadRequestResponse(c, "REP-400-003", "Date range (from, to) is required")
 		return
 	}
 
 	report, err := h.reportService.GetProfitLossReport(c.Request.Context(), branchID, from, to)
 	if err != nil {
-		utils.InternalErrorResponse(c, err.Error())
+		utils.InternalErrorResponse(c, "REP-500-002", err.Error())
 		return
 	}
 
@@ -79,13 +79,13 @@ func (h *ReportHandler) GetMultiBranchProfitLossReport(c *gin.Context) {
 	to := c.Query("to")
 
 	if from == "" || to == "" {
-		utils.BadRequestResponse(c, "Date range (from, to) is required")
+		utils.BadRequestResponse(c, "REP-400-004", "Date range (from, to) is required")
 		return
 	}
 
 	reports, err := h.reportService.GetMultiBranchProfitLossReport(c.Request.Context(), from, to)
 	if err != nil {
-		utils.InternalErrorResponse(c, err.Error())
+		utils.InternalErrorResponse(c, "REP-500-003", err.Error())
 		return
 	}
 
@@ -105,13 +105,13 @@ func (h *ReportHandler) GetTopProducts(c *gin.Context) {
 	limit, _ := strconv.Atoi(limitStr)
 
 	if from == "" || to == "" {
-		utils.BadRequestResponse(c, "Date range (from, to) is required")
+		utils.BadRequestResponse(c, "REP-400-005", "Date range (from, to) is required")
 		return
 	}
 
 	data, err := h.reportService.GetTopSellingProducts(c.Request.Context(), branchID, from, to, limit)
 	if err != nil {
-		utils.InternalErrorResponse(c, err.Error())
+		utils.InternalErrorResponse(c, "REP-500-004", err.Error())
 		return
 	}
 
@@ -129,13 +129,13 @@ func (h *ReportHandler) GetEmployeePerformance(c *gin.Context) {
 	to := c.Query("to")
 
 	if from == "" || to == "" {
-		utils.BadRequestResponse(c, "Date range (from, to) is required")
+		utils.BadRequestResponse(c, "REP-400-006", "Date range (from, to) is required")
 		return
 	}
 
 	data, err := h.reportService.GetEmployeePerformance(c.Request.Context(), branchID, from, to)
 	if err != nil {
-		utils.InternalErrorResponse(c, err.Error())
+		utils.InternalErrorResponse(c, "REP-500-005", err.Error())
 		return
 	}
 
@@ -153,13 +153,13 @@ func (h *ReportHandler) GetSalesTrends(c *gin.Context) {
 	to := c.Query("to")
 
 	if from == "" || to == "" {
-		utils.BadRequestResponse(c, "Date range (from, to) is required")
+		utils.BadRequestResponse(c, "REP-400-007", "Date range (from, to) is required")
 		return
 	}
 
 	data, err := h.reportService.GetSalesTrends(c.Request.Context(), branchID, from, to)
 	if err != nil {
-		utils.InternalErrorResponse(c, err.Error())
+		utils.InternalErrorResponse(c, "REP-500-006", err.Error())
 		return
 	}
 

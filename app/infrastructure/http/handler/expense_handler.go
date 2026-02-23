@@ -4,8 +4,8 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/devper-gold/gold-shop-api/app/feature/expense"
 	"github.com/devper-gold/gold-shop-api/app/domain/entity"
+	"github.com/devper-gold/gold-shop-api/app/feature/expense"
 	"github.com/devper-gold/gold-shop-api/pkg/utils"
 	"github.com/gin-gonic/gin"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -26,7 +26,7 @@ func (h *ExpenseHandler) GetExpenses(c *gin.Context) {
 
 	expenses, err := h.service.GetExpenses(c.Request.Context(), branchID, limit, offset)
 	if err != nil {
-		utils.InternalErrorResponse(c, err.Error())
+		utils.InternalErrorResponse(c, "EXP-500-001", err.Error())
 		return
 	}
 	utils.SuccessResponse(c, expenses)
@@ -43,7 +43,7 @@ func (h *ExpenseHandler) CreateExpense(c *gin.Context) {
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		utils.BadRequestResponse(c, err.Error())
+		utils.BadRequestResponse(c, "EXP-400-001", err.Error())
 		return
 	}
 
@@ -59,7 +59,7 @@ func (h *ExpenseHandler) CreateExpense(c *gin.Context) {
 	expense.ReceiptNumber = req.ReceiptNumber
 
 	if err := h.service.CreateExpense(c.Request.Context(), expense); err != nil {
-		utils.InternalErrorResponse(c, err.Error())
+		utils.InternalErrorResponse(c, "EXP-500-002", err.Error())
 		return
 	}
 
@@ -69,7 +69,7 @@ func (h *ExpenseHandler) CreateExpense(c *gin.Context) {
 func (h *ExpenseHandler) GetCategories(c *gin.Context) {
 	categories, err := h.service.GetCategories(c.Request.Context())
 	if err != nil {
-		utils.InternalErrorResponse(c, err.Error())
+		utils.InternalErrorResponse(c, "EXP-500-003", err.Error())
 		return
 	}
 	utils.SuccessResponse(c, categories)
@@ -82,7 +82,7 @@ func (h *ExpenseHandler) CreateCategory(c *gin.Context) {
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		utils.BadRequestResponse(c, err.Error())
+		utils.BadRequestResponse(c, "EXP-400-002", err.Error())
 		return
 	}
 
@@ -96,7 +96,7 @@ func (h *ExpenseHandler) CreateCategory(c *gin.Context) {
 	}
 
 	if err := h.service.CreateCategory(c.Request.Context(), category); err != nil {
-		utils.InternalErrorResponse(c, err.Error())
+		utils.InternalErrorResponse(c, "EXP-500-004", err.Error())
 		return
 	}
 

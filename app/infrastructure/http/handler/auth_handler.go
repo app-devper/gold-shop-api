@@ -28,13 +28,13 @@ type LoginRequest struct {
 func (h *AuthHandler) Login(c *gin.Context) {
 	var req LoginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		utils.BadRequestResponse(c, "Invalid request body")
+		utils.BadRequestResponse(c, "AUT-400-001", "Invalid request body")
 		return
 	}
 
 	token, user, err := h.authService.Login(c.Request.Context(), req.Username, req.Password)
 	if err != nil {
-		utils.UnauthorizedResponse(c, "Invalid credentials")
+		utils.UnauthorizedResponse(c, "AUT-401-001", "Invalid credentials")
 		return
 	}
 
@@ -55,13 +55,13 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 func (h *AuthHandler) RefreshToken(c *gin.Context) {
 	claims, exists := c.Get("claims")
 	if !exists {
-		utils.UnauthorizedResponse(c, "No claims found")
+		utils.UnauthorizedResponse(c, "AUT-401-002", "No claims found")
 		return
 	}
 
 	token, err := h.authService.RefreshToken(claims)
 	if err != nil {
-		utils.InternalErrorResponse(c, "Failed to refresh token")
+		utils.InternalErrorResponse(c, "AUT-500-001", "Failed to refresh token")
 		return
 	}
 
@@ -74,13 +74,13 @@ func (h *AuthHandler) RefreshToken(c *gin.Context) {
 func (h *AuthHandler) GetCurrentUser(c *gin.Context) {
 	userID, exists := c.Get("user_id")
 	if !exists {
-		utils.UnauthorizedResponse(c, "User not found")
+		utils.UnauthorizedResponse(c, "AUT-401-003", "User not found")
 		return
 	}
 
 	user, err := h.authService.GetUserByID(c.Request.Context(), userID.(string))
 	if err != nil {
-		utils.NotFoundResponse(c, "User not found")
+		utils.NotFoundResponse(c, "AUT-404-001", "User not found")
 		return
 	}
 
@@ -97,14 +97,14 @@ type ChangePasswordRequest struct {
 func (h *AuthHandler) ChangePassword(c *gin.Context) {
 	var req ChangePasswordRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		utils.BadRequestResponse(c, "Invalid request body")
+		utils.BadRequestResponse(c, "AUT-400-002", "Invalid request body")
 		return
 	}
 
 	userID, _ := c.Get("user_id")
 	err := h.authService.ChangePassword(c.Request.Context(), userID.(string), req.CurrentPassword, req.NewPassword)
 	if err != nil {
-		utils.BadRequestResponse(c, err.Error())
+		utils.BadRequestResponse(c, "AUT-400-003", err.Error())
 		return
 	}
 

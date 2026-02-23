@@ -21,14 +21,14 @@ func NewEmployeeHandler(service *employee.Service) *EmployeeHandler {
 func (h *EmployeeHandler) CreateEmployee(c *gin.Context) {
 	var req employee.CreateEmployeeRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		utils.BadRequestResponse(c, err.Error())
+		utils.BadRequestResponse(c, "EMP-400-001", err.Error())
 		return
 	}
 
 	createdBy := c.GetString("UserId")
 	emp, err := h.service.CreateEmployee(c.Request.Context(), &req, createdBy)
 	if err != nil {
-		utils.BadRequestResponse(c, err.Error())
+		utils.BadRequestResponse(c, "EMP-400-002", err.Error())
 		return
 	}
 
@@ -39,7 +39,7 @@ func (h *EmployeeHandler) CreateEmployee(c *gin.Context) {
 func (h *EmployeeHandler) GetEmployees(c *gin.Context) {
 	employees, err := h.service.GetEmployees(c.Request.Context())
 	if err != nil {
-		utils.InternalErrorResponse(c, err.Error())
+		utils.InternalErrorResponse(c, "EMP-500-001", err.Error())
 		return
 	}
 	utils.SuccessResponse(c, employees)
@@ -51,10 +51,10 @@ func (h *EmployeeHandler) GetMyEmployee(c *gin.Context) {
 	emp, err := h.service.GetMyEmployee(c.Request.Context(), userID)
 	if err != nil {
 		if err == entity.ErrNotFound {
-			utils.NotFoundResponse(c, "Employee not found")
+			utils.NotFoundResponse(c, "EMP-404-001", "Employee not found")
 			return
 		}
-		utils.InternalErrorResponse(c, err.Error())
+		utils.InternalErrorResponse(c, "EMP-500-002", err.Error())
 		return
 	}
 	utils.SuccessResponse(c, emp)
@@ -66,10 +66,10 @@ func (h *EmployeeHandler) GetEmployee(c *gin.Context) {
 	emp, err := h.service.GetEmployee(c.Request.Context(), id)
 	if err != nil {
 		if err == entity.ErrNotFound {
-			utils.NotFoundResponse(c, "Employee not found")
+			utils.NotFoundResponse(c, "EMP-404-002", "Employee not found")
 			return
 		}
-		utils.InternalErrorResponse(c, err.Error())
+		utils.InternalErrorResponse(c, "EMP-500-003", err.Error())
 		return
 	}
 	utils.SuccessResponse(c, emp)
@@ -80,7 +80,7 @@ func (h *EmployeeHandler) GetEmployeesByBranch(c *gin.Context) {
 	branchID := c.Param("branchId")
 	employees, err := h.service.GetEmployeesByBranchID(c.Request.Context(), branchID)
 	if err != nil {
-		utils.BadRequestResponse(c, err.Error())
+		utils.BadRequestResponse(c, "EMP-400-003", err.Error())
 		return
 	}
 	utils.SuccessResponse(c, employees)
@@ -91,7 +91,7 @@ func (h *EmployeeHandler) UpdateEmployee(c *gin.Context) {
 	id := c.Param("id")
 	var req employee.UpdateEmployeeRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		utils.BadRequestResponse(c, err.Error())
+		utils.BadRequestResponse(c, "EMP-400-004", err.Error())
 		return
 	}
 
@@ -99,10 +99,10 @@ func (h *EmployeeHandler) UpdateEmployee(c *gin.Context) {
 	emp, err := h.service.UpdateEmployee(c.Request.Context(), id, &req, updatedBy)
 	if err != nil {
 		if err == entity.ErrNotFound {
-			utils.NotFoundResponse(c, "Employee not found")
+			utils.NotFoundResponse(c, "EMP-404-003", "Employee not found")
 			return
 		}
-		utils.BadRequestResponse(c, err.Error())
+		utils.BadRequestResponse(c, "EMP-400-005", err.Error())
 		return
 	}
 	utils.SuccessResponse(c, emp)
@@ -113,10 +113,10 @@ func (h *EmployeeHandler) DeleteEmployee(c *gin.Context) {
 	id := c.Param("id")
 	if err := h.service.DeleteEmployee(c.Request.Context(), id); err != nil {
 		if err == entity.ErrNotFound {
-			utils.NotFoundResponse(c, "Employee not found")
+			utils.NotFoundResponse(c, "EMP-404-004", "Employee not found")
 			return
 		}
-		utils.InternalErrorResponse(c, err.Error())
+		utils.InternalErrorResponse(c, "EMP-500-004", err.Error())
 		return
 	}
 	utils.MessageResponse(c, "Employee deleted successfully")

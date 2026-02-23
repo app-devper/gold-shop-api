@@ -18,13 +18,13 @@ func NewInventoryHandler(service *inventory.Service) *InventoryHandler {
 func (h *InventoryHandler) CreateTransfer(c *gin.Context) {
 	var req inventory.CreateTransferRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		utils.BadRequestResponse(c, err.Error())
+		utils.BadRequestResponse(c, "INV-400-001", err.Error())
 		return
 	}
 
 	transfer, err := h.service.CreateTransfer(c.Request.Context(), req)
 	if err != nil {
-		utils.InternalErrorResponse(c, err.Error())
+		utils.InternalErrorResponse(c, "INV-500-001", err.Error())
 		return
 	}
 
@@ -40,13 +40,13 @@ func (h *InventoryHandler) GetTransfers(c *gin.Context) {
 	if branchID == "" {
 		// Just for MVP, returns error or assume all if admin?
 		// Service currently requires branchID.
-		utils.BadRequestResponse(c, "branch_id is required")
+		utils.BadRequestResponse(c, "INV-400-002", "branch_id is required")
 		return
 	}
 
 	transfers, err := h.service.GetTransfers(c.Request.Context(), branchID, "")
 	if err != nil {
-		utils.InternalErrorResponse(c, err.Error())
+		utils.InternalErrorResponse(c, "INV-500-002", err.Error())
 		return
 	}
 
@@ -58,7 +58,7 @@ func (h *InventoryHandler) GetTransfer(c *gin.Context) {
 	id := c.Param("id")
 	transfer, err := h.service.GetTransfer(c.Request.Context(), id)
 	if err != nil {
-		utils.InternalErrorResponse(c, err.Error())
+		utils.InternalErrorResponse(c, "INV-500-003", err.Error())
 		return
 	}
 
@@ -71,7 +71,7 @@ func (h *InventoryHandler) ApproveTransfer(c *gin.Context) {
 	userID := c.GetString("userID") // From middleware
 
 	if err := h.service.ApproveTransfer(c.Request.Context(), id, userID); err != nil {
-		utils.InternalErrorResponse(c, err.Error())
+		utils.InternalErrorResponse(c, "INV-500-004", err.Error())
 		return
 	}
 
@@ -84,7 +84,7 @@ func (h *InventoryHandler) ReceiveTransfer(c *gin.Context) {
 	userID := c.GetString("userID")
 
 	if err := h.service.ReceiveTransfer(c.Request.Context(), id, userID); err != nil {
-		utils.InternalErrorResponse(c, err.Error())
+		utils.InternalErrorResponse(c, "INV-500-005", err.Error())
 		return
 	}
 
@@ -96,7 +96,7 @@ func (h *InventoryHandler) CancelTransfer(c *gin.Context) {
 	id := c.Param("id")
 
 	if err := h.service.CancelTransfer(c.Request.Context(), id); err != nil {
-		utils.InternalErrorResponse(c, err.Error())
+		utils.InternalErrorResponse(c, "INV-500-006", err.Error())
 		return
 	}
 

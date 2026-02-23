@@ -8,10 +8,11 @@ import (
 
 // Response represents a standard API response
 type Response struct {
-	Success bool        `json:"success"`
-	Message string      `json:"message,omitempty"`
-	Data    interface{} `json:"data,omitempty"`
-	Error   string      `json:"error,omitempty"`
+	Success   bool        `json:"success"`
+	Message   string      `json:"message,omitempty"`
+	Data      interface{} `json:"data,omitempty"`
+	Error     string      `json:"error,omitempty"`
+	ErrorCode string      `json:"errorCode,omitempty"`
 }
 
 // PaginatedResponse represents a paginated API response
@@ -54,36 +55,37 @@ func MessageResponse(c *gin.Context, message string) {
 }
 
 // ErrorResponse sends an error response
-func ErrorResponse(c *gin.Context, status int, message string) {
+func ErrorResponse(c *gin.Context, errorCode string, status int, message string) {
 	c.JSON(status, Response{
-		Success: false,
-		Error:   message,
+		Success:   false,
+		Error:     message,
+		ErrorCode: errorCode,
 	})
 }
 
 // BadRequestResponse sends a bad request response
-func BadRequestResponse(c *gin.Context, message string) {
-	ErrorResponse(c, http.StatusBadRequest, message)
+func BadRequestResponse(c *gin.Context, errorCode string, message string) {
+	ErrorResponse(c, errorCode, http.StatusBadRequest, message)
 }
 
 // UnauthorizedResponse sends an unauthorized response
-func UnauthorizedResponse(c *gin.Context, message string) {
-	ErrorResponse(c, http.StatusUnauthorized, message)
+func UnauthorizedResponse(c *gin.Context, errorCode string, message string) {
+	ErrorResponse(c, errorCode, http.StatusUnauthorized, message)
 }
 
 // ForbiddenResponse sends a forbidden response
-func ForbiddenResponse(c *gin.Context, message string) {
-	ErrorResponse(c, http.StatusForbidden, message)
+func ForbiddenResponse(c *gin.Context, errorCode string, message string) {
+	ErrorResponse(c, errorCode, http.StatusForbidden, message)
 }
 
 // NotFoundResponse sends a not found response
-func NotFoundResponse(c *gin.Context, message string) {
-	ErrorResponse(c, http.StatusNotFound, message)
+func NotFoundResponse(c *gin.Context, errorCode string, message string) {
+	ErrorResponse(c, errorCode, http.StatusNotFound, message)
 }
 
 // InternalErrorResponse sends an internal server error response
-func InternalErrorResponse(c *gin.Context, message string) {
-	ErrorResponse(c, http.StatusInternalServerError, message)
+func InternalErrorResponse(c *gin.Context, errorCode string, message string) {
+	ErrorResponse(c, errorCode, http.StatusInternalServerError, message)
 }
 
 // PaginatedSuccessResponse sends a paginated success response

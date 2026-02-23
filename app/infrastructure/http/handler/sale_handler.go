@@ -3,8 +3,8 @@ package handler
 import (
 	"strconv"
 
-	"github.com/devper-gold/gold-shop-api/app/feature/sale"
 	"github.com/devper-gold/gold-shop-api/app/domain/entity"
+	"github.com/devper-gold/gold-shop-api/app/feature/sale"
 	"github.com/devper-gold/gold-shop-api/pkg/utils"
 	"github.com/gin-gonic/gin"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -78,7 +78,7 @@ func (h *SaleHandler) List(c *gin.Context) {
 
 	sales, err := h.saleService.GetByBranchID(c.Request.Context(), branchID, status, limit, offset)
 	if err != nil {
-		utils.InternalErrorResponse(c, "Failed to fetch sales")
+		utils.InternalErrorResponse(c, "SAL-500-001", "Failed to fetch sales")
 		return
 	}
 
@@ -89,17 +89,17 @@ func (h *SaleHandler) List(c *gin.Context) {
 func (h *SaleHandler) Get(c *gin.Context) {
 	id, err := primitive.ObjectIDFromHex(c.Param("id"))
 	if err != nil {
-		utils.BadRequestResponse(c, "Invalid sale ID")
+		utils.BadRequestResponse(c, "SAL-400-001", "Invalid sale ID")
 		return
 	}
 
 	saleEntity, err := h.saleService.GetByID(c.Request.Context(), id)
 	if err != nil {
 		if err == entity.ErrNotFound {
-			utils.NotFoundResponse(c, "Sale not found")
+			utils.NotFoundResponse(c, "SAL-404-001", "Sale not found")
 			return
 		}
-		utils.InternalErrorResponse(c, "Failed to fetch sale")
+		utils.InternalErrorResponse(c, "SAL-500-002", "Failed to fetch sale")
 		return
 	}
 
@@ -110,7 +110,7 @@ func (h *SaleHandler) Get(c *gin.Context) {
 func (h *SaleHandler) Create(c *gin.Context) {
 	var req CreateSaleRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		utils.BadRequestResponse(c, "Invalid request body")
+		utils.BadRequestResponse(c, "SAL-400-002", "Invalid request body")
 		return
 	}
 
@@ -162,7 +162,7 @@ func (h *SaleHandler) Create(c *gin.Context) {
 
 	saleEntity, err := h.saleService.Create(c.Request.Context(), input)
 	if err != nil {
-		utils.BadRequestResponse(c, err.Error())
+		utils.BadRequestResponse(c, "SAL-400-003", err.Error())
 		return
 	}
 
@@ -173,16 +173,16 @@ func (h *SaleHandler) Create(c *gin.Context) {
 func (h *SaleHandler) Cancel(c *gin.Context) {
 	id, err := primitive.ObjectIDFromHex(c.Param("id"))
 	if err != nil {
-		utils.BadRequestResponse(c, "Invalid sale ID")
+		utils.BadRequestResponse(c, "SAL-400-004", "Invalid sale ID")
 		return
 	}
 
 	if err := h.saleService.Cancel(c.Request.Context(), id); err != nil {
 		if err == entity.ErrNotFound {
-			utils.NotFoundResponse(c, "Sale not found")
+			utils.NotFoundResponse(c, "SAL-404-002", "Sale not found")
 			return
 		}
-		utils.BadRequestResponse(c, err.Error())
+		utils.BadRequestResponse(c, "SAL-400-005", err.Error())
 		return
 	}
 
@@ -193,13 +193,13 @@ func (h *SaleHandler) Cancel(c *gin.Context) {
 func (h *SaleHandler) GetReceipt(c *gin.Context) {
 	id, err := primitive.ObjectIDFromHex(c.Param("id"))
 	if err != nil {
-		utils.BadRequestResponse(c, "Invalid sale ID")
+		utils.BadRequestResponse(c, "SAL-400-006", "Invalid sale ID")
 		return
 	}
 
 	receipt, err := h.saleService.GenerateReceipt(c.Request.Context(), id)
 	if err != nil {
-		utils.InternalErrorResponse(c, "Failed to generate receipt")
+		utils.InternalErrorResponse(c, "SAL-500-003", "Failed to generate receipt")
 		return
 	}
 
@@ -215,7 +215,7 @@ func (h *SaleHandler) GetUnpaid(c *gin.Context) {
 
 	sales, err := h.saleService.GetUnpaidSales(c.Request.Context(), branchID)
 	if err != nil {
-		utils.InternalErrorResponse(c, "Failed to fetch unpaid sales")
+		utils.InternalErrorResponse(c, "SAL-500-004", "Failed to fetch unpaid sales")
 		return
 	}
 
