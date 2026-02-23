@@ -62,6 +62,7 @@ func Setup(r *gin.Engine, secretKey string, sessionRepo middleware.SessionLookup
 		employees := protected.Group("/employees")
 		{
 			employees.GET("", handlers.Employee.GetEmployees)
+			employees.GET("/me", handlers.Employee.GetMyEmployee)
 			employees.GET("/branch/:branchId", handlers.Employee.GetEmployeesByBranch)
 			employees.GET("/:id", handlers.Employee.GetEmployee)
 			employees.POST("", middleware.RequireRole(entity.UMRoleSuper, entity.UMRoleAdmin), handlers.Employee.CreateEmployee)

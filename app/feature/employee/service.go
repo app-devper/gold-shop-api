@@ -82,6 +82,26 @@ func (s *Service) GetEmployees(ctx context.Context) ([]*entity.Employee, error) 
 	return s.employeeRepo.GetAll(ctx)
 }
 
+// EmployeeWithBranch combines employee with branch name
+type EmployeeWithBranch struct {
+	*entity.Employee
+	BranchName string `json:"branchName"`
+}
+
+// GetMyEmployee retrieves the current user's employee record with branch name
+func (s *Service) GetMyEmployee(ctx context.Context, userID string) (*EmployeeWithBranch, error) {
+	emp, err := s.employeeRepo.GetByUserID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	branch, err := s.branchRepo.GetByID(ctx, emp.BranchID)
+	branchName := ""
+	if err == nil && branch != nil {
+		branchName = branch.Name
+	}
+	return &EmployeeWithBranch{Employee: emp, BranchName: branchName}, nil
+}
+
 // GetEmployeesByBranchID retrieves employees by branch ID
 func (s *Service) GetEmployeesByBranchID(ctx context.Context, branchID string) ([]*entity.Employee, error) {
 	objID, err := primitive.ObjectIDFromHex(branchID)
