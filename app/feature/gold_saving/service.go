@@ -10,9 +10,9 @@ import (
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
-// BahtPerGramOrnament is the ornament-gold conversion ratio.
-// Per-gram price = price-per-baht / BahtPerGramOrnament.
-const BahtPerGramOrnament = entity.BahtPerGramOrnament
+// Gold savings hold 99.99% bar gold — all prices and weight conversions use the
+// bar-side ratio, never ornament. Per-gram price = price-per-baht / BahtPerGramBar.
+const bahtPerGram = entity.BahtPerGramBar
 
 // Service implements the unified single-balance gold-savings business logic.
 type Service struct {
@@ -166,7 +166,7 @@ func (s *Service) Adjust(ctx context.Context, in AdjustInput) (*entity.GoldSavin
 	}
 	priceForAudit := 0.0
 	if gp, _ := s.goldPriceRepo.GetCurrent(ctx); gp != nil {
-		priceForAudit = gp.GoldOrnamentBuy / BahtPerGramOrnament
+		priceForAudit = gp.GoldBarBuy / bahtPerGram
 	}
 	if err := account.Adjust(in.WeightDelta, priceForAudit, in.Note, in.By); err != nil {
 		return nil, err
@@ -218,9 +218,9 @@ func (s *Service) GetStatement(ctx context.Context, accountID primitive.ObjectID
 	gp, _ := s.goldPriceRepo.GetCurrent(ctx)
 	var buyPerBaht, buyPerGram, sellPerGram float64
 	if gp != nil {
-		buyPerBaht = gp.GoldOrnamentBuy
-		buyPerGram = gp.GoldOrnamentBuy / BahtPerGramOrnament
-		sellPerGram = gp.GoldOrnamentSell / BahtPerGramOrnament
+		buyPerBaht = gp.GoldBarBuy
+		buyPerGram = gp.GoldBarBuy / bahtPerGram
+		sellPerGram = gp.GoldBarSell / bahtPerGram
 	}
 	currentValue := utils.RoundBaht(account.GoldWeight * buyPerGram)
 	costBasis := account.CostBasis()
@@ -256,10 +256,10 @@ func (s *Service) loadActiveAccountWithPrices(ctx context.Context, accountID pri
 	if err != nil || gp == nil {
 		return nil, 0, 0, errors.New("failed to get current gold price")
 	}
-	if gp.GoldOrnamentSell <= 0 || gp.GoldOrnamentBuy <= 0 {
+	if gp.GoldBarSell <= 0 || gp.GoldBarBuy <= 0 {
 		return nil, 0, 0, errors.New("invalid gold price configured")
 	}
-	sellPerGram := gp.GoldOrnamentSell / BahtPerGramOrnament
-	buyPerGram := gp.GoldOrnamentBuy / BahtPerGramOrnament
+	sellPerGram := gp.GoldBarSell / bahtPerGram
+	buyPerGram := gp.GoldBarBuy / bahtPerGram
 	return account, sellPerGram, buyPerGram, nil
 }

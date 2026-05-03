@@ -11,11 +11,12 @@ import (
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
-// goldPriceForTests — ornament 30,000 ฿/baht so per-gram = 1979.42
+// goldPriceForTests — bar 30,000 ฿/baht (sell) and 29,000 ฿/baht (buy).
+// per-gram price = baht-price / 15.244 → sell ≈ 1968.04, buy ≈ 1902.39
 func goldPriceForTests() *entity.GoldPrice {
 	return &entity.GoldPrice{
-		GoldOrnamentSell: 30000,
-		GoldOrnamentBuy:  29000,
+		GoldBarSell: 30000,
+		GoldBarBuy:  29000,
 	}
 }
 
@@ -78,10 +79,10 @@ func TestDepositCash(t *testing.T) {
 		priceRepo.On("GetCurrent", ctx).Return(goldPriceForTests(), nil)
 		savingRepo.On("Update", ctx, mock.AnythingOfType("*entity.GoldSaving")).Return(nil)
 
-		// Sell price = 30000 / 15.16 = 1978.89 ฿/g; ฿2000 → ~1.0107 g
+		// Bar sell price = 30000 / 15.244 = 1968.04 ฿/g; ฿2000 → ~1.0163 g
 		got, err := s.DepositCash(ctx, accountID, 2000, userID)
 		assert.NoError(t, err)
-		assert.InDelta(t, 1.0107, got.GoldWeight, 0.001)
+		assert.InDelta(t, 1.0163, got.GoldWeight, 0.001)
 		assert.Equal(t, 2000.0, got.TotalDepositValue)
 		assert.Len(t, got.Transactions, 1)
 		tx := got.Transactions[0]
@@ -124,8 +125,8 @@ func TestDepositGold(t *testing.T) {
 	got, err := s.DepositGold(ctx, accountID, 2.5, userID)
 	assert.NoError(t, err)
 	assert.InDelta(t, 2.5, got.GoldWeight, 1e-6)
-	// 2.5g × 1978.89 = 4947.23 ฿ cost basis
-	assert.InDelta(t, 4947.23, got.TotalDepositValue, 0.5)
+	// 2.5g × (30000/15.244) ≈ 4919.97 ฿ cost basis
+	assert.InDelta(t, 4919.97, got.TotalDepositValue, 0.5)
 }
 
 func TestWithdrawCash_UsesBuyPriceAndChecksBalance(t *testing.T) {
@@ -143,11 +144,11 @@ func TestWithdrawCash_UsesBuyPriceAndChecksBalance(t *testing.T) {
 	priceRepo.On("GetCurrent", ctx).Return(goldPriceForTests(), nil)
 	savingRepo.On("Update", ctx, mock.AnythingOfType("*entity.GoldSaving")).Return(nil)
 
-	// Buy price = 29000 / 15.16 = 1912.93 ฿/g.
-	// Withdraw ฿1500 → weight 0.7841g → remaining ~0.2159g
+	// Bar buy price = 29000 / 15.244 = 1902.39 ฿/g.
+	// Withdraw ฿1500 → weight 0.7885g → remaining ~0.2115g
 	got, err := s.WithdrawCash(ctx, accountID, 1500, userID)
 	assert.NoError(t, err)
-	assert.InDelta(t, 0.2159, got.GoldWeight, 0.001)
+	assert.InDelta(t, 0.2115, got.GoldWeight, 0.001)
 	assert.Equal(t, 1500.0, got.TotalWithdrawValue)
 }
 
@@ -207,7 +208,7 @@ func TestStatement_MarkToMarketAndPnL(t *testing.T) {
 	s := NewService(savingRepo, priceRepo, nil, nil)
 
 	// Customer deposited ฿5000 cash earlier; balance now ~2.526g.
-	// At buy price 1912.93, current value ≈ 4831.86 → PnL ≈ -168.14
+	// At bar buy price 1902.39, current value ≈ 4805.43 → PnL ≈ -194.57
 	account := &entity.GoldSaving{
 		ID:                 accountID,
 		GoldWeight:         2.526,
@@ -219,8 +220,8 @@ func TestStatement_MarkToMarketAndPnL(t *testing.T) {
 
 	st, err := s.GetStatement(ctx, accountID)
 	assert.NoError(t, err)
-	assert.InDelta(t, 4832.07, st.CurrentValue, 1)
-	assert.InDelta(t, -167.93, st.UnrealizedPnL, 1)
+	assert.InDelta(t, 4805.43, st.CurrentValue, 1)
+	assert.InDelta(t, -194.57, st.UnrealizedPnL, 1)
 	assert.True(t, st.UnrealizedPnLPercent < 0)
 }
 
