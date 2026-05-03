@@ -113,6 +113,8 @@ func Setup(r *gin.Engine, secretKey string, sessionRepo middleware.SessionLookup
 			goldSavings.POST("/:id/withdraw", handlers.GoldSaving.Withdraw)
 			goldSavings.POST("/:id/close", handlers.GoldSaving.Close)
 			goldSavings.GET("/:id/statement", handlers.GoldSaving.GetStatement)
+			// Admin-only manual correction (signed weight delta).
+			goldSavings.POST("/:id/adjust", middleware.RoleMiddleware(entity.EmployeeRoleAdmin), handlers.GoldSaving.Adjust)
 		}
 
 		// Product Categories

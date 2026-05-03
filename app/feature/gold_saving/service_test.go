@@ -11,142 +11,239 @@ import (
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
-func TestOpenAccount(t *testing.T) {
+// goldPriceForTests — ornament 30,000 ฿/baht so per-gram = 1979.42
+func goldPriceForTests() *entity.GoldPrice {
+	return &entity.GoldPrice{
+		GoldOrnamentSell: 30000,
+		GoldOrnamentBuy:  29000,
+	}
+}
+
+func TestOpen(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("Success", func(t *testing.T) {
 		branchID := primitive.NewObjectID()
 		customerID := primitive.NewObjectID()
 
-		mockSavingRepo := new(testutils.MockGoldSavingRepository)
-		mockBranchRepo := new(testutils.MockBranchRepository)
-		mockCustomerRepo := new(testutils.MockCustomerRepository)
-		service := NewService(mockSavingRepo, nil, mockBranchRepo, mockCustomerRepo)
+		savingRepo := new(testutils.MockGoldSavingRepository)
+		branchRepo := new(testutils.MockBranchRepository)
+		customerRepo := new(testutils.MockCustomerRepository)
+		s := NewService(savingRepo, nil, branchRepo, customerRepo)
 
-		branch := &entity.Branch{ID: branchID, Code: "B001", Name: "Test Branch"}
-		customer := &entity.Customer{ID: customerID, FullName: "Test Customer"}
+		branch := &entity.Branch{ID: branchID, Code: "B001"}
+		customer := &entity.Customer{ID: customerID, FullName: "Cust"}
 
-		mockBranchRepo.On("GetByID", ctx, branchID).Return(branch, nil)
-		mockCustomerRepo.On("GetByID", ctx, customerID).Return(customer, nil)
-		mockSavingRepo.On("GenerateAccountNumber", ctx, "B001").Return("GS20240001", nil)
-		mockSavingRepo.On("Create", ctx, mock.AnythingOfType("*entity.GoldSaving")).Return(nil)
+		branchRepo.On("GetByID", ctx, branchID).Return(branch, nil)
+		customerRepo.On("GetByID", ctx, customerID).Return(customer, nil)
+		savingRepo.On("GenerateAccountNumber", ctx, "B001").Return("GS-B001-0001", nil)
+		savingRepo.On("Create", ctx, mock.AnythingOfType("*entity.GoldSaving")).Return(nil)
 
-		account, err := service.OpenAccount(ctx, branchID, customerID, entity.GoldSavingByWeight, 100, 50)
+		account, err := s.Open(ctx, OpenInput{BranchID: branchID, CustomerID: customerID})
 
 		assert.NoError(t, err)
-		assert.NotNil(t, account)
-		assert.Equal(t, "GS20240001", account.AccountNumber)
-		assert.Equal(t, entity.GoldSavingByWeight, account.SavingType)
-
-		mockBranchRepo.AssertExpectations(t)
-		mockCustomerRepo.AssertExpectations(t)
-		mockSavingRepo.AssertExpectations(t)
-	})
-
-	t.Run("BranchNotFound", func(t *testing.T) {
-		branchID := primitive.NewObjectID()
-		mockBranchRepo := new(testutils.MockBranchRepository)
-		service := NewService(nil, nil, mockBranchRepo, nil)
-
-		mockBranchRepo.On("GetByID", ctx, branchID).Return(nil, nil).Once()
-
-		account, err := service.OpenAccount(ctx, branchID, primitive.NewObjectID(), entity.GoldSavingByWeight, 100, 50)
-
-		assert.Error(t, err)
-		assert.Nil(t, account)
-		assert.Equal(t, "branch not found", err.Error())
+		assert.Equal(t, "GS-B001-0001", account.AccountNumber)
+		assert.Equal(t, entity.GoldSavingStatusActive, account.Status)
+		assert.Equal(t, 0.0, account.GoldWeight)
 	})
 
 	t.Run("CustomerNotFound", func(t *testing.T) {
+		branchRepo := new(testutils.MockBranchRepository)
+		customerRepo := new(testutils.MockCustomerRepository)
+		s := NewService(nil, nil, branchRepo, customerRepo)
 		branchID := primitive.NewObjectID()
 		customerID := primitive.NewObjectID()
-		mockBranchRepo := new(testutils.MockBranchRepository)
-		mockCustomerRepo := new(testutils.MockCustomerRepository)
-		service := NewService(nil, nil, mockBranchRepo, mockCustomerRepo)
-
-		branch := &entity.Branch{ID: branchID, Code: "B001"}
-		mockBranchRepo.On("GetByID", ctx, branchID).Return(branch, nil)
-		mockCustomerRepo.On("GetByID", ctx, customerID).Return(nil, nil)
-
-		account, err := service.OpenAccount(ctx, branchID, customerID, entity.GoldSavingByWeight, 0, 0)
-
-		assert.Error(t, err)
-		assert.Nil(t, account)
-		assert.Equal(t, "customer not found", err.Error())
-	})
-
-	t.Run("InvalidSavingType", func(t *testing.T) {
-		service := NewService(nil, nil, nil, nil)
-		_, err := service.OpenAccount(ctx, primitive.NewObjectID(), primitive.NewObjectID(), "bogus", 0, 0)
-		assert.EqualError(t, err, "invalid saving type")
+		branchRepo.On("GetByID", ctx, branchID).Return(&entity.Branch{ID: branchID, Code: "B001"}, nil)
+		customerRepo.On("GetByID", ctx, customerID).Return(nil, nil)
+		_, err := s.Open(ctx, OpenInput{BranchID: branchID, CustomerID: customerID})
+		assert.EqualError(t, err, "customer not found")
 	})
 }
 
-func TestDeposit(t *testing.T) {
+func TestDepositCash(t *testing.T) {
 	ctx := context.Background()
 	accountID := primitive.NewObjectID()
 	userID := primitive.NewObjectID()
 
-	t.Run("Success", func(t *testing.T) {
-		mockSavingRepo := new(testutils.MockGoldSavingRepository)
-		mockPriceRepo := new(testutils.MockGoldPriceRepository)
-		service := NewService(mockSavingRepo, mockPriceRepo, nil, nil)
+	t.Run("Success_DerivesWeightAtSellPrice", func(t *testing.T) {
+		savingRepo := new(testutils.MockGoldSavingRepository)
+		priceRepo := new(testutils.MockGoldPriceRepository)
+		s := NewService(savingRepo, priceRepo, nil, nil)
 
 		account := &entity.GoldSaving{
-			ID:         accountID,
-			SavingType: entity.GoldSavingByMoney,
-			Status:     entity.GoldSavingStatusActive,
-			MinDeposit: 100,
+			ID:     accountID,
+			Status: entity.GoldSavingStatusActive,
 		}
-		goldPrice := &entity.GoldPrice{
-			GoldOrnamentSell: 30000,
-		}
+		savingRepo.On("GetByID", ctx, accountID).Return(account, nil)
+		priceRepo.On("GetCurrent", ctx).Return(goldPriceForTests(), nil)
+		savingRepo.On("Update", ctx, mock.AnythingOfType("*entity.GoldSaving")).Return(nil)
 
-		mockSavingRepo.On("GetByID", ctx, accountID).Return(account, nil)
-		mockPriceRepo.On("GetCurrent", ctx).Return(goldPrice, nil)
-		mockSavingRepo.On("Update", ctx, mock.AnythingOfType("*entity.GoldSaving")).Return(nil)
-
-		updatedAccount, err := service.Deposit(ctx, accountID, 3000, userID)
-
+		// Sell price = 30000 / 15.16 = 1978.89 ฿/g; ฿2000 → ~1.0107 g
+		got, err := s.DepositCash(ctx, accountID, 2000, userID)
 		assert.NoError(t, err)
-		assert.NotNil(t, updatedAccount)
-		assert.InDelta(t, 0.1, updatedAccount.GoldBalance, 0.0001) // 3000 / 30000 = 0.1
-
-		mockSavingRepo.AssertExpectations(t)
-		mockPriceRepo.AssertExpectations(t)
+		assert.InDelta(t, 1.0107, got.GoldWeight, 0.001)
+		assert.Equal(t, 2000.0, got.TotalDepositValue)
+		assert.Len(t, got.Transactions, 1)
+		tx := got.Transactions[0]
+		assert.Equal(t, entity.TxDeposit, tx.Type)
+		assert.Equal(t, entity.TxModeCash, tx.Mode)
+		assert.True(t, tx.GoldWeightDelta > 0)
 	})
 
-	t.Run("AccountNotFound", func(t *testing.T) {
-		mockSavingRepo := new(testutils.MockGoldSavingRepository)
-		service := NewService(mockSavingRepo, nil, nil, nil)
+	t.Run("BelowMinimum", func(t *testing.T) {
+		savingRepo := new(testutils.MockGoldSavingRepository)
+		priceRepo := new(testutils.MockGoldPriceRepository)
+		s := NewService(savingRepo, priceRepo, nil, nil)
 
-		mockSavingRepo.On("GetByID", ctx, accountID).Return(nil, nil).Once()
+		account := &entity.GoldSaving{
+			Status:         entity.GoldSavingStatusActive,
+			MinDepositCash: 5000,
+		}
+		savingRepo.On("GetByID", ctx, accountID).Return(account, nil)
+		priceRepo.On("GetCurrent", ctx).Return(goldPriceForTests(), nil)
 
-		updatedAccount, err := service.Deposit(ctx, accountID, 3000, userID)
-
-		assert.Error(t, err)
-		assert.Nil(t, updatedAccount)
-		assert.Equal(t, "account not found", err.Error())
+		_, err := s.DepositCash(ctx, accountID, 1000, userID)
+		assert.ErrorContains(t, err, "minimum cash deposit")
 	})
+}
 
-	t.Run("AmountZeroRejected", func(t *testing.T) {
-		service := NewService(nil, nil, nil, nil)
-		_, err := service.Deposit(ctx, accountID, 0, userID)
-		assert.EqualError(t, err, "amount must be greater than zero")
+func TestDepositGold(t *testing.T) {
+	ctx := context.Background()
+	accountID := primitive.NewObjectID()
+	userID := primitive.NewObjectID()
+
+	savingRepo := new(testutils.MockGoldSavingRepository)
+	priceRepo := new(testutils.MockGoldPriceRepository)
+	s := NewService(savingRepo, priceRepo, nil, nil)
+
+	account := &entity.GoldSaving{Status: entity.GoldSavingStatusActive}
+	savingRepo.On("GetByID", ctx, accountID).Return(account, nil)
+	priceRepo.On("GetCurrent", ctx).Return(goldPriceForTests(), nil)
+	savingRepo.On("Update", ctx, mock.AnythingOfType("*entity.GoldSaving")).Return(nil)
+
+	got, err := s.DepositGold(ctx, accountID, 2.5, userID)
+	assert.NoError(t, err)
+	assert.InDelta(t, 2.5, got.GoldWeight, 1e-6)
+	// 2.5g × 1978.89 = 4947.23 ฿ cost basis
+	assert.InDelta(t, 4947.23, got.TotalDepositValue, 0.5)
+}
+
+func TestWithdrawCash_UsesBuyPriceAndChecksBalance(t *testing.T) {
+	ctx := context.Background()
+	accountID := primitive.NewObjectID()
+	userID := primitive.NewObjectID()
+
+	savingRepo := new(testutils.MockGoldSavingRepository)
+	priceRepo := new(testutils.MockGoldPriceRepository)
+	s := NewService(savingRepo, priceRepo, nil, nil)
+
+	// Pre-existing balance: 1g
+	account := &entity.GoldSaving{Status: entity.GoldSavingStatusActive, GoldWeight: 1.0}
+	savingRepo.On("GetByID", ctx, accountID).Return(account, nil)
+	priceRepo.On("GetCurrent", ctx).Return(goldPriceForTests(), nil)
+	savingRepo.On("Update", ctx, mock.AnythingOfType("*entity.GoldSaving")).Return(nil)
+
+	// Buy price = 29000 / 15.16 = 1912.93 ฿/g.
+	// Withdraw ฿1500 → weight 0.7841g → remaining ~0.2159g
+	got, err := s.WithdrawCash(ctx, accountID, 1500, userID)
+	assert.NoError(t, err)
+	assert.InDelta(t, 0.2159, got.GoldWeight, 0.001)
+	assert.Equal(t, 1500.0, got.TotalWithdrawValue)
+}
+
+func TestWithdrawCash_InsufficientBalance(t *testing.T) {
+	ctx := context.Background()
+	accountID := primitive.NewObjectID()
+	userID := primitive.NewObjectID()
+
+	savingRepo := new(testutils.MockGoldSavingRepository)
+	priceRepo := new(testutils.MockGoldPriceRepository)
+	s := NewService(savingRepo, priceRepo, nil, nil)
+
+	account := &entity.GoldSaving{Status: entity.GoldSavingStatusActive, GoldWeight: 0.1}
+	savingRepo.On("GetByID", ctx, accountID).Return(account, nil)
+	priceRepo.On("GetCurrent", ctx).Return(goldPriceForTests(), nil)
+
+	// Want ฿10,000 ≈ 5.226g but only 0.1g
+	_, err := s.WithdrawCash(ctx, accountID, 10000, userID)
+	assert.ErrorIs(t, err, entity.ErrInsufficientBalance)
+}
+
+func TestAdjust_RequiresNoteAndRecordsAudit(t *testing.T) {
+	ctx := context.Background()
+	accountID := primitive.NewObjectID()
+	userID := primitive.NewObjectID()
+
+	savingRepo := new(testutils.MockGoldSavingRepository)
+	priceRepo := new(testutils.MockGoldPriceRepository)
+	s := NewService(savingRepo, priceRepo, nil, nil)
+
+	account := &entity.GoldSaving{Status: entity.GoldSavingStatusActive, GoldWeight: 1.0}
+	savingRepo.On("GetByID", ctx, accountID).Return(account, nil)
+	priceRepo.On("GetCurrent", ctx).Return(goldPriceForTests(), nil)
+	savingRepo.On("Update", ctx, mock.AnythingOfType("*entity.GoldSaving")).Return(nil)
+
+	// Missing note → reject
+	_, err := s.Adjust(ctx, AdjustInput{AccountID: accountID, WeightDelta: -0.1, By: userID})
+	assert.EqualError(t, err, "note is required for adjustment")
+
+	got, err := s.Adjust(ctx, AdjustInput{
+		AccountID: accountID, WeightDelta: -0.1, Note: "physical loss reconciliation", By: userID,
 	})
+	assert.NoError(t, err)
+	assert.InDelta(t, 0.9, got.GoldWeight, 1e-6)
+	assert.Len(t, got.Transactions, 1)
+	tx := got.Transactions[0]
+	assert.Equal(t, entity.TxAdjust, tx.Type)
+	assert.Equal(t, "physical loss reconciliation", tx.Note)
+}
 
-	t.Run("BelowMinimumWithUnit", func(t *testing.T) {
-		mockSavingRepo := new(testutils.MockGoldSavingRepository)
-		service := NewService(mockSavingRepo, nil, nil, nil)
+func TestStatement_MarkToMarketAndPnL(t *testing.T) {
+	ctx := context.Background()
+	accountID := primitive.NewObjectID()
 
-		mockSavingRepo.On("GetByID", ctx, accountID).Return(&entity.GoldSaving{
-			Status:     entity.GoldSavingStatusActive,
-			SavingType: entity.GoldSavingByMoney,
-			MinDeposit: 1000,
-		}, nil).Once()
+	savingRepo := new(testutils.MockGoldSavingRepository)
+	priceRepo := new(testutils.MockGoldPriceRepository)
+	s := NewService(savingRepo, priceRepo, nil, nil)
 
-		_, err := service.Deposit(ctx, accountID, 50, userID)
-		assert.ErrorContains(t, err, "amount is below minimum deposit")
-		assert.ErrorContains(t, err, "฿")
-	})
+	// Customer deposited ฿5000 cash earlier; balance now ~2.526g.
+	// At buy price 1912.93, current value ≈ 4831.86 → PnL ≈ -168.14
+	account := &entity.GoldSaving{
+		ID:                 accountID,
+		GoldWeight:         2.526,
+		TotalDepositValue:  5000,
+		TotalDepositWeight: 2.526,
+	}
+	savingRepo.On("GetByID", ctx, accountID).Return(account, nil)
+	priceRepo.On("GetCurrent", ctx).Return(goldPriceForTests(), nil)
+
+	st, err := s.GetStatement(ctx, accountID)
+	assert.NoError(t, err)
+	assert.InDelta(t, 4832.07, st.CurrentValue, 1)
+	assert.InDelta(t, -167.93, st.UnrealizedPnL, 1)
+	assert.True(t, st.UnrealizedPnLPercent < 0)
+}
+
+func TestClose_RequiresZeroBalance(t *testing.T) {
+	ctx := context.Background()
+	accountID := primitive.NewObjectID()
+
+	savingRepo := new(testutils.MockGoldSavingRepository)
+	s := NewService(savingRepo, nil, nil, nil)
+
+	// non-zero balance → reject
+	savingRepo.On("GetByID", ctx, accountID).Return(&entity.GoldSaving{
+		Status: entity.GoldSavingStatusActive, GoldWeight: 0.5,
+	}, nil).Once()
+	_, err := s.Close(ctx, accountID)
+	assert.ErrorContains(t, err, "still has balance")
+
+	// zero balance → ok
+	savingRepo.On("GetByID", ctx, accountID).Return(&entity.GoldSaving{
+		Status: entity.GoldSavingStatusActive, GoldWeight: 0,
+	}, nil).Once()
+	savingRepo.On("Update", ctx, mock.AnythingOfType("*entity.GoldSaving")).Return(nil).Once()
+	got, err := s.Close(ctx, accountID)
+	assert.NoError(t, err)
+	assert.Equal(t, entity.GoldSavingStatusClosed, got.Status)
 }
