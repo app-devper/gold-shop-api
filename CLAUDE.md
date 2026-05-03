@@ -1,0 +1,87 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+This is one subproject inside the `/Users/admin/ProjectPos` workspace — the workspace-level [`CLAUDE.md`](../../CLAUDE.md) covers cross-service rules (auth hub `um-api`, JWT/Redis session contract, role conventions). Read this file together with that one.
+
+## Common commands
+
+Run from this directory ([gold-shop-api/](.)):
+
+```bash
+go mod download
+go run main.go                                 # binds :SERVER_PORT (8085 in .env, 8080 default)
+go test ./...                                  # full suite
+go test ./app/feature/sale                     # single package
+go test -run TestCreateSale ./app/feature/sale # single test
+gofmt -w <file>
+```
+
+OpenAPI spec lives at [docs/openapi.yaml](docs/openapi.yaml); preview with `npx @redocly/cli preview-docs docs/openapi.yaml`.
+
+## Configuration
+
+Loaded by [app/config/config.go](app/config/config.go) from `.env` via `godotenv`. Required by the running service: `SERVER_PORT`, `SERVER_ENV`, `MONGODB_URI`, `MONGODB_DATABASE`, `REDIS_HOST` (Redis URL — `redis://...`), `SECRET_KEY` (HMAC for JWTs from `um-api`), `CLIENT_ID`, `SYSTEM` (defaults to `GOLD`), `GOLD_API_URL` (Thai gold price API).
+
+`JWT_SECRET` is loaded into `Config.JWT.Secret` and is required when `SERVER_ENV=production` — but the actual JWT verification uses `cfg.Auth.SecretKey` (`SECRET_KEY`), which is what must match `um-api`. The `JWT_SECRET` check is currently dead config; don't rely on it for auth.
+
+## Architecture
+
+Clean Architecture, but the directory naming differs from sibling Go services in this workspace:
+
+- `app/feature/<domain>/` — **not** `app/featues/` (the typo-preserving name used by `pos-api` / `snook-api` / `um-api`). Don't try to "fix" sibling services to match this one or vice versa.
+- Each feature has a `service.go` and (often) `service_test.go`. There is no per-feature handler — HTTP handlers live in [app/infrastructure/http/handler/](app/infrastructure/http/handler/), routes in [app/infrastructure/http/router/router.go](app/infrastructure/http/router/router.go), middleware in [app/infrastructure/http/middleware/](app/infrastructure/http/middleware/).
+- Domain entities are in [app/domain/entity/](app/domain/entity/); repository interfaces in [app/domain/repository/interfaces.go](app/domain/repository/interfaces.go); Mongo/Redis implementations in [app/infrastructure/mongo/](app/infrastructure/mongo/) and [app/infrastructure/redis/](app/infrastructure/redis/).
+- DI wiring (and the only place repos/services/handlers are constructed) is [app/init.go](app/init.go) — `App.StartApp`.
+- `main.go` is a 5-line entry point.
+
+### Auth & middleware chain
+
+All `/api/v1` routes go through (in [router.go:45-49](app/infrastructure/http/router/router.go#L45-L49)):
+
+1. `RequireAuthenticated(secretKey)` — validates HMAC-SHA256 JWT from `um-api`, sets `SessionId`, `Role` (UM role from JWT), `System`, `ClientId`.
+2. `RequireSession(sessionRepo)` — looks up `SessionId` in Redis under key `session:<id>`, parses JSON for `userId`, sets `UserId`. See [redis/session_repo.go](app/infrastructure/redis/session_repo.go).
+3. `RequireBranch(employeeRepo, branchRepo)` — resolves the employee's branch and local role into context. **Falls back to `HQ` branch with `STAFF` role only when `entity.ErrNotFound` is returned**; any other error is a 500. Don't widen this fallback — it would mask data-layer failures.
+
+Per-route role gates layer on top:
+- `RoleMiddleware(EmployeeRoleAdmin, ...)` — checks the **employee role** from `RequireBranch` (`ADMIN` / `MANAGER` / `STAFF`).
+- `RequireRole(UMRoleSuper, UMRoleAdmin)` — checks the **UM role** from the JWT (`SUPER` / `ADMIN` / `USER`).
+
+Used differently on purpose: employee CRUD uses `RequireRole` (UM-level), most domain mutations use `RoleMiddleware` (employee-level). See [app/domain/entity/employee.go](app/domain/entity/employee.go) for the constants.
+
+### Bootstrap & seed data
+
+`StartApp` pings Mongo and Redis, then calls `initializeDefaultData`:
+- Creates `HQ` branch (`สำนักงานใหญ่`) if missing — **the `RequireBranch` fallback depends on this branch existing**.
+- Creates an initial `GoldPrice` if none exists, fetched from `GOLD_API_URL`, falling back to hardcoded values (`Bar 42350/42450`, `Ornament 41850/42950`) if the API call fails. Seed failures are logged as warnings only — startup continues.
+
+### Transactions
+
+`repository.TransactionManager` ([interfaces.go:11-15](app/domain/repository/interfaces.go#L11-L15)) abstracts atomic ops. `mongo.MongoTransactionManager` uses `session.WithTransaction`; `testutils.MockTransactionManager` just invokes `fn(ctx)` directly so unit tests don't need a Mongo replica set.
+
+The **sale create** flow ([feature/sale/service.go](app/feature/sale/service.go)) is the canonical pattern and worth understanding before editing other mutating services:
+
+- **Phase 1 (no DB writes)**: validate every item, look up products/items, check branch ownership and status, compute totals into a `[]resolvedItem`. Validate customer points budget *before* the transaction.
+- **Phase 2 (inside `WithTransaction`)**: generate the sale number (so it rolls back on failure), persist sale, then for each resolved item either flip a piece-based `ProductItem` to `Sold` or atomically `DeductWeight`; write a `StockLog` entry; update customer points/spending.
+- **Cancel** is the inverse: piece items go back to `Available`, weight items get `AddWeight`, stock logs record `cancel`, customer points/spend are reversed (capped at 0). See [service.go:399-473](app/feature/sale/service.go#L399-L473).
+
+Inventory transfers and reward redemption follow the same Phase 1 / Phase 2 pattern via the same `TransactionManager`.
+
+### Sale-number / pawn-number / account-number generation
+
+Atomic via the shared `counters` collection ([mongo/counter_repo.go](app/infrastructure/mongo/counter_repo.go)) — `FindOneAndUpdate` with `$inc` and `upsert`. Generation runs *inside* the transaction so a failed sale doesn't burn a number gap (in practice gaps still happen on Mongo retries, but they're rare).
+
+## Domain rules worth knowing before editing
+
+- **Money & weight rounding** — always round through [pkg/utils/money.go](pkg/utils/money.go): `RoundBaht` (2dp, satang) for currency, `RoundGram` (6dp) for gold weight. `RoundGram`'s 6-decimal precision exists specifically to kill floating-point tail noise from `amount/goldPrice` divisions while preserving sub-milligram increments. Don't introduce ad-hoc rounding.
+- **Gold-type price math** — see [entity/product.go](app/domain/entity/product.go). `BahtPerGramOrnament = 15.16` (96.5% gold), `BahtPerGramBar = 15.244` (99.99% gold). `Product.IsBarGold()` matches `"99.99%"` or `"99.99"` (both forms exist in the wild). Per-gram sell price is `goldPrice.GoldXxxSell / BahtPerGramXxx` ([sale/service.go:102-107](app/feature/sale/service.go#L102-L107)). Manual `Price` on a sale item overrides the dynamic calc.
+- **Stock types** — `Product.StockType` is either `piece` or `weight`; empty string defaults to `weight` for legacy rows (`DefaultStockType()`). Piece-based products require a `ProductItemID` per sale line and decrement by flipping that item's status; weight-based use atomic `DeductWeight`/`AddWeight` on the product row.
+- **Pawn interest** ([entity/pawn.go](app/domain/entity/pawn.go)) — accrues in **30-day blocks**, not calendar months. Partial 30-day periods accrue zero. `monthsBetween(start, end) = (end.Sub(start).Hours()/24) / 30`. `CalculateTotalInterestDue` measures from the *last paid period's `PeriodTo`*, not from `StartDate`, when payments exist.
+- **Gold savings** ([entity/gold_saving.go](app/domain/entity/gold_saving.go)) — `SavingType` is `money` (deposit cash, convert to gold weight at current price) or `weight` (deposit gold directly). Withdraw can be `asCash` (deduct gold weight equivalent + decrement cash balance) or physical gold. `CashBalance` is floored at 0 on withdraw.
+- **Customer points** — sales accrue 1 point per 100 baht of `NetTotal`; cancellation restores `PointsUsed` and removes `PointsEarned` (capped at 0 if the customer already spent them).
+
+## Cross-service awareness
+
+- **Don't change `SECRET_KEY` semantics or session-key format** without also updating `um-api` — JWT signing and the `session:<id>` Redis key shape are a contract owned by `um-api`.
+- This service shares Redis with all other workspace services. The only key it reads is `session:<id>`. Don't write to Redis from this service.
+- API base path is `/api/v1` (note: gold uses `/api/v1`, not `/api/gold/v1` like the sibling services).

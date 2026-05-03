@@ -3,17 +3,26 @@ package gold_saving
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/devper-gold/gold-shop-api/app/domain/entity"
 	"github.com/devper-gold/gold-shop-api/app/domain/repository"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
+func unitLabel(t entity.GoldSavingType) string {
+	if t == entity.GoldSavingByMoney {
+		return "฿"
+	}
+	return "g"
+}
+
 // Service handles gold saving logic
 type Service struct {
 	goldSavingRepo repository.GoldSavingRepository
 	goldPriceRepo  repository.GoldPriceRepository
 	branchRepo     repository.BranchRepository
+	customerRepo   repository.CustomerRepository
 }
 
 // NewService creates a new GoldSaving service
@@ -21,11 +30,13 @@ func NewService(
 	goldSavingRepo repository.GoldSavingRepository,
 	goldPriceRepo repository.GoldPriceRepository,
 	branchRepo repository.BranchRepository,
+	customerRepo repository.CustomerRepository,
 ) *Service {
 	return &Service{
 		goldSavingRepo: goldSavingRepo,
 		goldPriceRepo:  goldPriceRepo,
 		branchRepo:     branchRepo,
+		customerRepo:   customerRepo,
 	}
 }
 
@@ -41,9 +52,21 @@ func (s *Service) GetByBranchID(ctx context.Context, branchID primitive.ObjectID
 
 // OpenAccount opens a new gold saving account
 func (s *Service) OpenAccount(ctx context.Context, branchID, customerID primitive.ObjectID, savingType entity.GoldSavingType, minDeposit, minWithdrawal float64) (*entity.GoldSaving, error) {
+	if savingType != entity.GoldSavingByMoney && savingType != entity.GoldSavingByWeight {
+		return nil, errors.New("invalid saving type")
+	}
+	if minDeposit < 0 || minWithdrawal < 0 {
+		return nil, errors.New("minimums must be non-negative")
+	}
+
 	branch, err := s.branchRepo.GetByID(ctx, branchID)
 	if err != nil || branch == nil {
 		return nil, errors.New("branch not found")
+	}
+
+	customer, err := s.customerRepo.GetByID(ctx, customerID)
+	if err != nil || customer == nil {
+		return nil, errors.New("customer not found")
 	}
 
 	accountNumber, err := s.goldSavingRepo.GenerateAccountNumber(ctx, branch.Code)
@@ -60,8 +83,13 @@ func (s *Service) OpenAccount(ctx context.Context, branchID, customerID primitiv
 	return account, nil
 }
 
-// Deposit deposits to a gold saving account
+// Deposit deposits to a gold saving account.
+// `amount` unit follows account.SavingType: ByMoney = baht, ByWeight = grams.
 func (s *Service) Deposit(ctx context.Context, accountID primitive.ObjectID, amount float64, userID primitive.ObjectID) (*entity.GoldSaving, error) {
+	if amount <= 0 {
+		return nil, errors.New("amount must be greater than zero")
+	}
+
 	account, err := s.goldSavingRepo.GetByID(ctx, accountID)
 	if err != nil || account == nil {
 		return nil, errors.New("account not found")
@@ -71,13 +99,14 @@ func (s *Service) Deposit(ctx context.Context, accountID primitive.ObjectID, amo
 		return nil, errors.New("account is not active")
 	}
 
-	if amount < account.MinDeposit {
-		return nil, errors.New("amount is below minimum deposit")
+	if account.MinDeposit > 0 && amount < account.MinDeposit {
+		unit := unitLabel(account.SavingType)
+		return nil, fmt.Errorf("amount is below minimum deposit (%g %s)", account.MinDeposit, unit)
 	}
 
 	// Get current gold price
 	goldPrice, err := s.goldPriceRepo.GetCurrent(ctx)
-	if err != nil {
+	if err != nil || goldPrice == nil {
 		return nil, errors.New("failed to get current gold price")
 	}
 
@@ -92,8 +121,13 @@ func (s *Service) Deposit(ctx context.Context, accountID primitive.ObjectID, amo
 	return account, nil
 }
 
-// Withdraw withdraws from a gold saving account
+// Withdraw withdraws from a gold saving account.
+// `amount` unit: asCash=true → baht; asCash=false → grams (physical gold).
 func (s *Service) Withdraw(ctx context.Context, accountID primitive.ObjectID, amount float64, asCash bool, userID primitive.ObjectID) (*entity.GoldSaving, error) {
+	if amount <= 0 {
+		return nil, errors.New("amount must be greater than zero")
+	}
+
 	account, err := s.goldSavingRepo.GetByID(ctx, accountID)
 	if err != nil || account == nil {
 		return nil, errors.New("account not found")
@@ -103,13 +137,19 @@ func (s *Service) Withdraw(ctx context.Context, accountID primitive.ObjectID, am
 		return nil, errors.New("account is not active")
 	}
 
-	if amount < account.MinWithdrawal {
-		return nil, errors.New("amount is below minimum withdrawal")
+	if account.MinWithdrawal > 0 && amount < account.MinWithdrawal {
+		// Withdraw min is denominated by withdraw mode, not account mode:
+		// asCash=true → baht; asCash=false → grams.
+		unit := "g"
+		if asCash {
+			unit = "฿"
+		}
+		return nil, fmt.Errorf("amount is below minimum withdrawal (%g %s)", account.MinWithdrawal, unit)
 	}
 
 	// Get current gold price
 	goldPrice, err := s.goldPriceRepo.GetCurrent(ctx)
-	if err != nil {
+	if err != nil || goldPrice == nil {
 		return nil, errors.New("failed to get current gold price")
 	}
 
@@ -135,7 +175,8 @@ func (s *Service) Close(ctx context.Context, accountID primitive.ObjectID) (*ent
 		return nil, errors.New("account is not active")
 	}
 
-	if account.GoldBalance > 0 {
+	// Block close while either balance is non-trivial. RoundGram precision is 1e-6.
+	if account.GoldBalance > 1e-6 || account.CashBalance > 0.01 {
 		return nil, errors.New("account still has balance, please withdraw first")
 	}
 

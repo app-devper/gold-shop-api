@@ -106,7 +106,7 @@ func (a App) StartApp() {
 	saleService := sale.NewService(saleRepo, productRepo, productItemRepo, goldPriceRepo, stockLogRepo, customerRepo, branchRepo, nil, txManager)
 	pawnService := pawn.NewService(pawnRepo, branchRepo)
 	goldPriceService := gold_price_app.NewService(goldPriceRepo, goldAPIClient)
-	goldSavingService := gold_saving.NewService(goldSavingRepo, goldPriceRepo, branchRepo)
+	goldSavingService := gold_saving.NewService(goldSavingRepo, goldPriceRepo, branchRepo, customerRepo)
 	productService := product.NewService(productRepo, productItemRepo, stockLogRepo, productCategoryRepo, branchRepo)
 	customerService := customer.NewService(customerRepo)
 	inventoryService := inventory.NewService(inventoryRepo, productRepo, branchRepo, txManager)
