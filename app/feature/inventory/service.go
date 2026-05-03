@@ -15,17 +15,20 @@ type Service struct {
 	transferRepo repository.InventoryTransferRepository
 	productRepo  repository.ProductRepository
 	branchRepo   repository.BranchRepository
+	txManager    repository.TransactionManager
 }
 
 func NewService(
 	transferRepo repository.InventoryTransferRepository,
 	productRepo repository.ProductRepository,
 	branchRepo repository.BranchRepository,
+	txManager repository.TransactionManager,
 ) *Service {
 	return &Service{
 		transferRepo: transferRepo,
 		productRepo:  productRepo,
 		branchRepo:   branchRepo,
+		txManager:    txManager,
 	}
 }
 
@@ -46,12 +49,14 @@ func (s *Service) CreateTransfer(ctx context.Context, req CreateTransferRequest)
 	if err != nil {
 		return nil, errors.New("invalid to_branch_id")
 	}
+	if fromBranchOID == toBranchOID {
+		return nil, errors.New("from_branch and to_branch must differ")
+	}
 	requestedByOID, err := primitive.ObjectIDFromHex(req.RequestedBy)
 	if err != nil {
 		return nil, errors.New("invalid requested_by")
 	}
 
-	// Verify branches exist
 	if _, err := s.branchRepo.GetByID(ctx, fromBranchOID); err != nil {
 		return nil, errors.New("source branch not found")
 	}
@@ -59,26 +64,15 @@ func (s *Service) CreateTransfer(ctx context.Context, req CreateTransferRequest)
 		return nil, errors.New("destination branch not found")
 	}
 
-	// Generate Transfer Number
-	// Assuming FromBranch is where the request originates or format "TR-YYYYMMDD-XXXX"
-	transferNumber, err := s.transferRepo.GenerateTransferNumber(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	transfer := entity.NewInventoryTransfer(transferNumber, fromBranchOID, toBranchOID, requestedByOID)
-	transfer.Notes = req.Notes
-
-	// Process Items
+	resolved := make([]*entity.Product, 0, len(req.ProductIDs))
 	for _, pid := range req.ProductIDs {
 		productID, err := primitive.ObjectIDFromHex(pid)
 		if err != nil {
 			return nil, fmt.Errorf("invalid product id: %s", pid)
 		}
 
-		// Verify product exists and belongs to FromBranch and is Available
 		product, err := s.productRepo.GetByID(ctx, productID)
-		if err != nil {
+		if err != nil || product == nil {
 			return nil, fmt.Errorf("product not found: %s", pid)
 		}
 		if product.BranchID != fromBranchOID {
@@ -88,55 +82,50 @@ func (s *Service) CreateTransfer(ctx context.Context, req CreateTransferRequest)
 			return nil, fmt.Errorf("product %s is not available (status: %s)", product.Name, product.Status)
 		}
 
-		// Add item with Quantity 1 (Serialized)
-		transfer.AddItem(productID, 1)
+		resolved = append(resolved, product)
 	}
 
-	if err := s.transferRepo.Create(ctx, transfer); err != nil {
+	transferNumber, err := s.transferRepo.GenerateTransferNumber(ctx)
+	if err != nil {
 		return nil, err
 	}
 
-	// Should we mark products as "InTransit" or "Reserved" immediately?
-	// If allow validation, maybe "Reserved".
-	// But Transfer has status Pending.
-	// We should probably lock products so they aren't sold.
-	// Update products status to Reserved?
-	for _, item := range transfer.Items {
-		product, _ := s.productRepo.GetByID(ctx, item.ProductID)
-		if product != nil {
+	transfer := entity.NewInventoryTransfer(transferNumber, fromBranchOID, toBranchOID, requestedByOID)
+	transfer.Notes = req.Notes
+	for _, product := range resolved {
+		transfer.AddItem(product.ID, 1)
+	}
+
+	txErr := s.txManager.WithTransaction(ctx, func(txCtx context.Context) error {
+		if err := s.transferRepo.Create(txCtx, transfer); err != nil {
+			return err
+		}
+		for _, product := range resolved {
 			product.Status = entity.ProductStatusReserved
 			product.UpdatedAt = time.Now()
-			_ = s.productRepo.Update(ctx, product) // Ignore error? Ideally transactional.
+			if err := s.productRepo.Update(txCtx, product); err != nil {
+				return fmt.Errorf("failed to reserve product %s: %w", product.Name, err)
+			}
 		}
+		return nil
+	})
+	if txErr != nil {
+		return nil, txErr
 	}
 
 	return transfer, nil
 }
 
 func (s *Service) GetTransfers(ctx context.Context, branchID string, role string) ([]*entity.InventoryTransfer, error) {
-	// If admin, show all? Or filter by branch.
-	// For API simplicity, if branchID provided, filter.
-	// Repo has GetByFromBranchID and GetByToBranchID.
-	// We might need a generic Search or combine two queries.
-	// Prioritize: If branchID is set, get transfers involving this branch (From or To).
-
 	branchOID, err := primitive.ObjectIDFromHex(branchID)
 	if err != nil {
 		return nil, errors.New("invalid branch ID")
 	}
 
-	// This logic might be complex with current Repo interface (From/To separate).
-	// For MVP, just return FromBranch transfers? Or need new Repo method `GetByBranchID`.
-	// I'll stick to FromBranch for now or fetch both and merge.
-
 	fromTransfers, _ := s.transferRepo.GetByFromBranchID(ctx, branchOID, nil)
 	toTransfers, _ := s.transferRepo.GetByToBranchID(ctx, branchOID, nil)
 
-	// Merge
-	result := append(fromTransfers, toTransfers...)
-	// Deduplicate? They shouldn't overlap unless From=To (impossible).
-
-	return result, nil
+	return append(fromTransfers, toTransfers...), nil
 }
 
 func (s *Service) GetTransfer(ctx context.Context, id string) (*entity.InventoryTransfer, error) {
@@ -168,8 +157,6 @@ func (s *Service) ApproveTransfer(ctx context.Context, id, userID string) error 
 
 	transfer.Approve(userOID)
 
-	// Products remain Reserved (or change to InTransit if Product entity supported it? ProductStatusReserved is fine).
-
 	return s.transferRepo.Update(ctx, transfer)
 }
 
@@ -194,21 +181,21 @@ func (s *Service) ReceiveTransfer(ctx context.Context, id, userID string) error 
 
 	transfer.Receive(userOID)
 
-	// Update Products: BranchID -> ToBranchID, Status -> Available
-	for _, item := range transfer.Items {
-		product, err := s.productRepo.GetByID(ctx, item.ProductID)
-		if err != nil {
-			continue // Log error?
+	return s.txManager.WithTransaction(ctx, func(txCtx context.Context) error {
+		for _, item := range transfer.Items {
+			product, err := s.productRepo.GetByID(txCtx, item.ProductID)
+			if err != nil || product == nil {
+				return fmt.Errorf("product not found during receive: %s", item.ProductID.Hex())
+			}
+			product.BranchID = transfer.ToBranchID
+			product.Status = entity.ProductStatusAvailable
+			product.UpdatedAt = time.Now()
+			if err := s.productRepo.Update(txCtx, product); err != nil {
+				return err
+			}
 		}
-		product.BranchID = transfer.ToBranchID
-		product.Status = entity.ProductStatusAvailable
-		product.UpdatedAt = time.Now()
-		if err := s.productRepo.Update(ctx, product); err != nil {
-			return err
-		}
-	}
-
-	return s.transferRepo.Update(ctx, transfer)
+		return s.transferRepo.Update(txCtx, transfer)
+	})
 }
 
 func (s *Service) CancelTransfer(ctx context.Context, id string) error {
@@ -222,21 +209,26 @@ func (s *Service) CancelTransfer(ctx context.Context, id string) error {
 		return err
 	}
 
-	if transfer.Status != entity.TransferStatusPending {
-		return errors.New("can only cancel pending transfers")
+	if transfer.Status != entity.TransferStatusPending && transfer.Status != entity.TransferStatusInTransit {
+		return errors.New("can only cancel pending or in-transit transfers")
 	}
 
 	transfer.Cancel()
 
-	// Revert Products to Available
-	for _, item := range transfer.Items {
-		product, _ := s.productRepo.GetByID(ctx, item.ProductID)
-		if product != nil {
+	return s.txManager.WithTransaction(ctx, func(txCtx context.Context) error {
+		for _, item := range transfer.Items {
+			product, err := s.productRepo.GetByID(txCtx, item.ProductID)
+			if err != nil || product == nil {
+				return fmt.Errorf("product not found during cancel: %s", item.ProductID.Hex())
+			}
+			// Restore at the source branch — products were reserved there but never moved.
+			product.BranchID = transfer.FromBranchID
 			product.Status = entity.ProductStatusAvailable
 			product.UpdatedAt = time.Now()
-			_ = s.productRepo.Update(ctx, product)
+			if err := s.productRepo.Update(txCtx, product); err != nil {
+				return err
+			}
 		}
-	}
-
-	return s.transferRepo.Update(ctx, transfer)
+		return s.transferRepo.Update(txCtx, transfer)
+	})
 }

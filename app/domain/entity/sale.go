@@ -3,6 +3,7 @@ package entity
 import (
 	"time"
 
+	"github.com/devper-gold/gold-shop-api/pkg/utils"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
@@ -133,25 +134,28 @@ func (s *Sale) AddPayment(payment Payment) {
 
 // CalculateTotals recalculates all totals
 func (s *Sale) CalculateTotals() {
-	// Calculate subtotal from items
-	s.Subtotal = 0
+	subtotal := 0.0
 	for _, item := range s.Items {
-		s.Subtotal += item.Total
+		subtotal += item.Total
 	}
+	s.Subtotal = utils.RoundBaht(subtotal)
 
-	// Calculate old gold value
-	s.OldGoldValue = 0
+	oldGold := 0.0
 	for _, item := range s.OldGoldItems {
-		s.OldGoldValue += item.Total
+		oldGold += item.Total
 	}
+	s.OldGoldValue = utils.RoundBaht(oldGold)
 
-	// Calculate net total
 	discountAmount := s.Discount
 	if s.DiscountType == DiscountTypePercent {
 		discountAmount = s.Subtotal * (s.Discount / 100)
 	}
 
-	s.NetTotal = s.Subtotal - discountAmount - s.OldGoldValue
+	net := s.Subtotal - discountAmount - s.OldGoldValue
+	if net < 0 {
+		net = 0
+	}
+	s.NetTotal = utils.RoundBaht(net)
 }
 
 // GetTotalPayments returns total amount paid

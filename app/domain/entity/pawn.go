@@ -3,6 +3,7 @@ package entity
 import (
 	"time"
 
+	"github.com/devper-gold/gold-shop-api/pkg/utils"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
@@ -95,22 +96,18 @@ func (p *Pawn) AddItem(item PawnItem) {
 
 // CalculateInterest calculates interest for a given period
 func (p *Pawn) CalculateInterest(months int) float64 {
-	return p.Principal * (p.InterestRate / 100) * float64(months)
+	return utils.RoundBaht(p.Principal * (p.InterestRate / 100) * float64(months))
 }
 
-// CalculateTotalInterestDue calculates total interest due from last payment to now
+// CalculateTotalInterestDue calculates total interest due from last payment to now.
+// Months are counted in 30-day blocks; partial months accrue zero interest until matured.
 func (p *Pawn) CalculateTotalInterestDue() float64 {
 	lastPaymentDate := p.StartDate
 	if len(p.InterestPayments) > 0 {
 		lastPaymentDate = p.InterestPayments[len(p.InterestPayments)-1].PeriodTo
 	}
 
-	now := time.Now()
-	months := monthsBetween(lastPaymentDate, now)
-	if months < 1 {
-		months = 1 // Minimum 1 month
-	}
-
+	months := monthsBetween(lastPaymentDate, time.Now())
 	return p.CalculateInterest(months)
 }
 
@@ -129,12 +126,16 @@ func (p *Pawn) PayInterest(amount float64, periodFrom, periodTo time.Time, recei
 
 // Redeem redeems the pawn
 func (p *Pawn) Redeem(interest, discount float64, receivedBy primitive.ObjectID) {
+	totalPaid := utils.RoundBaht(p.Principal + interest - discount)
+	if totalPaid < 0 {
+		totalPaid = 0
+	}
 	p.Redemption = &Redemption{
 		Date:       time.Now(),
 		Principal:  p.Principal,
-		Interest:   interest,
-		Discount:   discount,
-		TotalPaid:  p.Principal + interest - discount,
+		Interest:   utils.RoundBaht(interest),
+		Discount:   utils.RoundBaht(discount),
+		TotalPaid:  totalPaid,
 		ReceivedBy: receivedBy,
 	}
 	p.Status = PawnStatusRedeemed
@@ -165,16 +166,13 @@ func (p *Pawn) DaysUntilDue() int {
 	return int(time.Until(p.DueDate).Hours() / 24)
 }
 
-// monthsBetween calculates months between two dates
+// monthsBetween counts elapsed 30-day periods between two timestamps.
+// Returns 0 when end is not after start, or when the gap is shorter than one
+// matured 30-day period — partial months accrue no interest.
 func monthsBetween(start, end time.Time) int {
-	years := end.Year() - start.Year()
-	months := int(end.Month()) - int(start.Month())
-	days := end.Day() - start.Day()
-
-	totalMonths := years*12 + months
-	if days > 0 {
-		totalMonths++
+	if !end.After(start) {
+		return 0
 	}
-
-	return totalMonths
+	days := int(end.Sub(start).Hours() / 24)
+	return days / 30
 }

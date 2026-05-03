@@ -6,6 +6,7 @@ import (
 
 	"github.com/devper-gold/gold-shop-api/app/domain/entity"
 	"github.com/devper-gold/gold-shop-api/app/domain/repository"
+	"github.com/devper-gold/gold-shop-api/pkg/utils"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
@@ -115,6 +116,10 @@ func (s *Service) Create(ctx context.Context, input CreateSaleInput) (*entity.Sa
 		return nil, errors.New("branch not found")
 	}
 
+	if input.Discount < 0 {
+		return nil, errors.New("discount cannot be negative")
+	}
+
 	// Create sale (sale number will be generated inside the transaction)
 	sale := entity.NewSale(input.BranchID, input.UserID, "", input.SaleType)
 	sale.Discount = input.Discount
@@ -213,9 +218,11 @@ func (s *Service) Create(ctx context.Context, input CreateSaleInput) (*entity.Sa
 			unitPrice = *itemInput.Price
 		}
 
-		total := unitPrice + laborCost
+		if itemInput.Discount < 0 {
+			return nil, errors.New("item discount cannot be negative")
+		}
 
-		// Apply item discount
+		total := unitPrice + laborCost
 		if itemInput.Discount > 0 {
 			if itemInput.DiscountType == entity.DiscountTypePercent {
 				total -= total * (itemInput.Discount / 100)
@@ -223,6 +230,10 @@ func (s *Service) Create(ctx context.Context, input CreateSaleInput) (*entity.Sa
 				total -= itemInput.Discount
 			}
 		}
+		if total < 0 {
+			total = 0
+		}
+		total = utils.RoundBaht(total)
 
 		saleItem := entity.SaleItem{
 			ProductID:     productID,
@@ -231,8 +242,8 @@ func (s *Service) Create(ctx context.Context, input CreateSaleInput) (*entity.Sa
 			GoldType:      product.GoldType,
 			Weight:        weight,
 			PriceLevel:    itemInput.PriceLevel,
-			UnitPrice:     unitPrice,
-			LaborCost:     laborCost,
+			UnitPrice:     utils.RoundBaht(unitPrice),
+			LaborCost:     utils.RoundBaht(laborCost),
 			Discount:      itemInput.Discount,
 			DiscountType:  itemInput.DiscountType,
 			Cost:          product.Cost,
@@ -255,7 +266,7 @@ func (s *Service) Create(ctx context.Context, input CreateSaleInput) (*entity.Sa
 			GoldType:     oldGold.GoldType,
 			Weight:       oldGold.Weight,
 			PricePerUnit: oldGold.PricePerUnit,
-			Total:        oldGold.Weight * oldGold.PricePerUnit,
+			Total:        utils.RoundBaht(oldGold.Weight * oldGold.PricePerUnit),
 		}
 		sale.AddOldGoldItem(oldGoldItem)
 	}

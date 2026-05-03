@@ -1,9 +1,9 @@
 package entity
 
 import (
-	"math"
 	"time"
 
+	"github.com/devper-gold/gold-shop-api/pkg/utils"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
@@ -87,13 +87,13 @@ func (gs *GoldSaving) Deposit(amount, goldPrice float64, processedBy primitive.O
 
 	if gs.SavingType == GoldSavingByMoney {
 		// Calculate gold weight based on current price
-		goldWeight = math.Round((amount/goldPrice)*10000) / 10000
-		gs.GoldBalance += goldWeight
-		gs.CashBalance += amount
+		goldWeight = utils.RoundGram(amount / goldPrice)
+		gs.GoldBalance = utils.RoundGram(gs.GoldBalance + goldWeight)
+		gs.CashBalance = utils.RoundBaht(gs.CashBalance + amount)
 	} else {
 		// Direct gold weight deposit
-		goldWeight = amount
-		gs.GoldBalance += goldWeight
+		goldWeight = utils.RoundGram(amount)
+		gs.GoldBalance = utils.RoundGram(gs.GoldBalance + goldWeight)
 	}
 
 	transaction := GoldSavingTransaction{
@@ -118,17 +118,25 @@ func (gs *GoldSaving) Withdraw(amount float64, asCash bool, goldPrice float64, p
 
 	if asCash {
 		// Withdraw as cash - calculate gold weight to deduct
-		goldWeight = amount / goldPrice
+		goldWeight = utils.RoundGram(amount / goldPrice)
 	} else {
 		// Withdraw as physical gold
-		goldWeight = amount
+		goldWeight = utils.RoundGram(amount)
 	}
 
 	if goldWeight > gs.GoldBalance {
 		return ErrInsufficientBalance
 	}
 
-	gs.GoldBalance -= goldWeight
+	gs.GoldBalance = utils.RoundGram(gs.GoldBalance - goldWeight)
+	if asCash {
+		gs.CashBalance = utils.RoundBaht(gs.CashBalance - amount)
+	} else {
+		gs.CashBalance = utils.RoundBaht(gs.CashBalance - goldWeight*goldPrice)
+	}
+	if gs.CashBalance < 0 {
+		gs.CashBalance = 0
+	}
 
 	transaction := GoldSavingTransaction{
 		Date:         time.Now(),

@@ -50,7 +50,7 @@ func (r *expenseRepository) GetByBranchID(ctx context.Context, branchID primitiv
 	}
 
 	opts := options.Find().
-		SetSort(bson.M{"date": -1}).
+		SetSort(bson.M{"expense_date": -1}).
 		SetSkip(int64(offset)).
 		SetLimit(int64(limit))
 
@@ -74,13 +74,13 @@ func (r *expenseRepository) GetByDateRange(ctx context.Context, branchID primiti
 
 	filter := bson.M{
 		"branch_id": branchID,
-		"date": bson.M{
+		"expense_date": bson.M{
 			"$gte": fromDate,
 			"$lt":  toDate,
 		},
 	}
 
-	opts := options.Find().SetSort(bson.M{"date": -1})
+	opts := options.Find().SetSort(bson.M{"expense_date": -1})
 	cursor, err := r.collection.Find(ctx, filter, opts)
 	if err != nil {
 		return nil, err
@@ -133,7 +133,7 @@ func (r *expenseRepository) SumByBranchAndDateRange(ctx context.Context, branchI
 		{
 			"$match": bson.M{
 				"branch_id": branchID,
-				"date": bson.M{
+				"expense_date": bson.M{
 					"$gte": fromDate,
 					"$lt":  toDate,
 				},

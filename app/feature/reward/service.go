@@ -14,17 +14,20 @@ type Service struct {
 	rewardRepo     repository.RewardRepository
 	redemptionRepo repository.RewardRedemptionRepository
 	customerRepo   repository.CustomerRepository
+	txManager      repository.TransactionManager
 }
 
 func NewService(
 	rewardRepo repository.RewardRepository,
 	redemptionRepo repository.RewardRedemptionRepository,
 	customerRepo repository.CustomerRepository,
+	txManager repository.TransactionManager,
 ) *Service {
 	return &Service{
 		rewardRepo:     rewardRepo,
 		redemptionRepo: redemptionRepo,
 		customerRepo:   customerRepo,
+		txManager:      txManager,
 	}
 }
 
@@ -46,29 +49,27 @@ func (s *Service) UpdateReward(ctx context.Context, reward *entity.Reward) error
 }
 
 func (s *Service) RedeemReward(ctx context.Context, customerID, rewardID, branchID, processedBy primitive.ObjectID) (*entity.RewardRedemption, error) {
-	// Get customer
 	customer, err := s.customerRepo.GetByID(ctx, customerID)
-	if err != nil {
+	if err != nil || customer == nil {
 		return nil, errors.New("customer not found")
 	}
+	if !customer.IsMember || customer.Membership == nil {
+		return nil, errors.New("customer is not a member")
+	}
 
-	// Get reward
 	reward, err := s.rewardRepo.GetByID(ctx, rewardID)
-	if err != nil {
+	if err != nil || reward == nil {
 		return nil, errors.New("reward not found")
 	}
 
-	// Validate reward
-	if reward == nil || !reward.IsValid() {
+	if !reward.IsValid() {
 		return nil, errors.New("reward is not valid or out of stock")
 	}
 
-	// Validate points
 	if customer.Membership.Points < reward.PointsRequired {
 		return nil, errors.New("insufficient points")
 	}
 
-	// Create redemption
 	redemption := &entity.RewardRedemption{
 		ID:          primitive.NewObjectID(),
 		CustomerID:  customerID,
@@ -79,23 +80,23 @@ func (s *Service) RedeemReward(ctx context.Context, customerID, rewardID, branch
 		ProcessedBy: processedBy,
 	}
 
-	// Deduct points from customer
-	customer.Membership.Points -= reward.PointsRequired
-	customer.UpdatedAt = time.Now()
-	if err := s.customerRepo.Update(ctx, customer); err != nil {
-		return nil, err
-	}
+	txErr := s.txManager.WithTransaction(ctx, func(txCtx context.Context) error {
+		customer.Membership.Points -= reward.PointsRequired
+		customer.UpdatedAt = time.Now()
+		if err := s.customerRepo.Update(txCtx, customer); err != nil {
+			return err
+		}
 
-	// Deduct quantity from reward
-	reward.DeductQuantity()
-	reward.UpdatedAt = time.Now()
-	if err := s.rewardRepo.Update(ctx, reward); err != nil {
-		return nil, err
-	}
+		reward.DeductQuantity()
+		reward.UpdatedAt = time.Now()
+		if err := s.rewardRepo.Update(txCtx, reward); err != nil {
+			return err
+		}
 
-	// Save redemption
-	if err := s.redemptionRepo.Create(ctx, redemption); err != nil {
-		return nil, err
+		return s.redemptionRepo.Create(txCtx, redemption)
+	})
+	if txErr != nil {
+		return nil, txErr
 	}
 
 	return redemption, nil
