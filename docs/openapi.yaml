@@ -1593,17 +1593,47 @@ components:
 
     OldGoldItem:
       type: object
+      description: |
+        Customer-supplied gold being traded in. Used in sales of type `buy_old`
+        or `exchange`. Routing of the physical gold after the sale is captured
+        at the parent `Sale.old_item_destination`, not per-item.
       properties:
         description:
           type: string
         gold_type:
           type: string
+          example: 96.5%
+        kind:
+          type: string
+          enum: [ornament, bar]
+          description: Form of the traded-in gold.
+        condition:
+          type: string
+          enum: [good, fair, damaged]
+          description: |
+            Physical state recorded by the shop (SRS 3.7). Audit metadata only —
+            does not affect price math; price is `weight × price_per_unit × (1 − deduction_percent/100)`.
+            - `good` — สภาพดี
+            - `fair` — พอใช้
+            - `damaged` — ชำรุด
         weight:
           type: number
+          description: Weight in grams.
         price_per_unit:
           type: number
+          description: Buyback price per gram (baht).
+        gross_total:
+          type: number
+          description: "`weight × price_per_unit` before deduction."
+        deduction_percent:
+          type: number
+          description: Percent deducted by the shop from `gross_total`.
+        deduction_amount:
+          type: number
+          description: "`gross_total × deduction_percent / 100`."
         total:
           type: number
+          description: "`gross_total − deduction_amount`. Net buyback."
 
     Payment:
       type: object
@@ -1625,6 +1655,14 @@ components:
           type: string
         sale_number:
           type: string
+          description: |
+            Auto-generated reference (SRS 6.2). Format: `<prefix>{YYMMDD}{XXXX}`.
+            Prefix encodes `sale_type`:
+            - `S` — sell
+            - `B` — buy_old
+            - `TR` — exchange
+            `XXXX` is a per-day, per-prefix, per-branch atomic counter.
+          example: S2605040001
         customer_id:
           type: string
         user_id:
@@ -1640,6 +1678,16 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/OldGoldItem"
+        old_item_destination:
+          type: string
+          enum: [melt, resell, scrap]
+          description: |
+            Where the customer-traded-in gold goes after the sale (SRS 3.7).
+            Set on `buy_old` / `exchange`; omitted for `sell`. Audit field — does
+            not affect price math.
+            - `melt` — ส่งหลอม
+            - `resell` — เข้าสต็อกขายต่อ
+            - `scrap` — เก็บเป็นเศษ
         subtotal:
           type: number
         discount:
@@ -1688,6 +1736,10 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/OldGoldItem"
+        old_item_destination:
+          type: string
+          enum: [melt, resell, scrap]
+          description: Destination for traded-in gold. Required when `sale_type` is `buy_old` or `exchange`.
         discount:
           type: number
           default: 0
@@ -1951,6 +2003,21 @@ components:
           type: string
         category_id:
           type: string
+          description: |
+            Deprecated. Reference to a master `ProductCategory` document.
+            Prefer the inline `category` enum below for ornament products.
+        category:
+          type: string
+          enum: [necklace, bracelet, ring, bangle, earring, pendant, amulet]
+          description: |
+            Ornament-only sub-category (SRS 3.2). Omit for `kind=bar`.
+            - `necklace` — สร้อยคอ
+            - `bracelet` — สร้อยข้อมือ
+            - `ring` — แหวน
+            - `bangle` — กำไล
+            - `earring` — ต่างหู
+            - `pendant` — จี้
+            - `amulet` — เลี่ยมพระ
         sku:
           type: string
         barcode:
@@ -1959,6 +2026,9 @@ components:
           type: string
         description:
           type: string
+        note:
+          type: string
+          description: Internal note for shop staff (separate from `description`, which is customer-facing).
         stock_type:
           type: string
           enum: [piece, weight]
@@ -1993,6 +2063,10 @@ components:
       properties:
         category_id:
           type: string
+        category:
+          type: string
+          enum: [necklace, bracelet, ring, bangle, earring, pendant, amulet]
+          description: Ornament sub-category (SRS 3.2). Omit for bar products.
         sku:
           type: string
         barcode:
@@ -2001,6 +2075,9 @@ components:
           type: string
         description:
           type: string
+        note:
+          type: string
+          description: Internal note (separate from customer-facing `description`).
         stock_type:
           type: string
           enum: [piece, weight]

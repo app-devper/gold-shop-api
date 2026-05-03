@@ -31,6 +31,8 @@ type CreateProductRequest struct {
 	GoldType         string   `json:"gold_type" binding:"required"`
 	Name             string   `json:"name" binding:"required"`
 	Description      string   `json:"description"`
+	Note             string   `json:"note"`
+	Category         string   `json:"category"`
 	Design           string   `json:"design"`
 	BarSizeBaht      *float64 `json:"bar_size_baht"`
 	DefaultLaborCost float64  `json:"default_labor_cost"`
@@ -52,6 +54,8 @@ func (h *ProductHandler) CreateProduct(c *gin.Context) {
 		GoldType:         req.GoldType,
 		Name:             req.Name,
 		Description:      req.Description,
+		Note:             req.Note,
+		Category:         entity.ProductCategory(req.Category),
 		Design:           req.Design,
 		BarSizeBaht:      req.BarSizeBaht,
 		DefaultLaborCost: req.DefaultLaborCost,
@@ -99,6 +103,8 @@ func (h *ProductHandler) GetProducts(c *gin.Context) {
 type UpdateProductRequest struct {
 	Name             *string  `json:"name"`
 	Description      *string  `json:"description"`
+	Note             *string  `json:"note"`
+	Category         *string  `json:"category"`
 	Design           *string  `json:"design"`
 	DefaultLaborCost *float64 `json:"default_labor_cost"`
 	BarSizeBaht      *float64 `json:"bar_size_baht"`
@@ -117,9 +123,16 @@ func (h *ProductHandler) UpdateProduct(c *gin.Context) {
 		utils.BadRequestResponse(c, "PRD-400-005", err.Error())
 		return
 	}
+	var categoryPtr *entity.ProductCategory
+	if req.Category != nil {
+		cat := entity.ProductCategory(*req.Category)
+		categoryPtr = &cat
+	}
 	p, err := h.service.UpdateProduct(c.Request.Context(), id, product.UpdateProductInput{
 		Name:             req.Name,
 		Description:      req.Description,
+		Note:             req.Note,
+		Category:         categoryPtr,
 		Design:           req.Design,
 		DefaultLaborCost: req.DefaultLaborCost,
 		BarSizeBaht:      req.BarSizeBaht,

@@ -61,8 +61,8 @@ func (m *MockSaleRepository) Update(ctx context.Context, sale *entity.Sale) erro
 	return args.Error(0)
 }
 
-func (m *MockSaleRepository) GenerateSaleNumber(ctx context.Context, branchCode string) (string, error) {
-	args := m.Called(ctx, branchCode)
+func (m *MockSaleRepository) GenerateSaleNumber(ctx context.Context, branchCode string, saleType entity.SaleType) (string, error) {
+	args := m.Called(ctx, branchCode, saleType)
 	return args.String(0), args.Error(1)
 }
 

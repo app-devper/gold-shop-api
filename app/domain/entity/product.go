@@ -18,7 +18,7 @@ const (
 
 // ProductKind discriminates how a product is priced and described.
 //
-//	ornament — ทองรูปพรรณ; per-piece labor (ค่ากำเหน็จ); free-text Design.
+//	ornament — ทองรูปพรรณ; per-piece labor (ค่ากำเหน็จ); free-text Design + Category.
 //	bar      — ทองคำแท่ง; no labor; weight derived from BarSizeBaht (× 15.244 g/baht).
 type ProductKind string
 
@@ -26,6 +26,31 @@ const (
 	KindOrnament ProductKind = "ornament"
 	KindBar      ProductKind = "bar"
 )
+
+// ProductCategory enumerates the standard ornament sub-categories per SRS 3.2.
+// Bar products leave Category empty.
+type ProductCategory string
+
+const (
+	CategoryNecklace ProductCategory = "necklace" // สร้อยคอ
+	CategoryBracelet ProductCategory = "bracelet" // สร้อยข้อมือ
+	CategoryRing     ProductCategory = "ring"     // แหวน
+	CategoryBangle   ProductCategory = "bangle"   // กำไล
+	CategoryEarring  ProductCategory = "earring"  // ต่างหู
+	CategoryPendant  ProductCategory = "pendant"  // จี้
+	CategoryAmulet   ProductCategory = "amulet"   // เลี่ยมพระ
+)
+
+// IsValidProductCategory reports whether c is one of the recognised ornament
+// categories. Empty string is valid (used by bar products).
+func IsValidProductCategory(c ProductCategory) bool {
+	switch c {
+	case "", CategoryNecklace, CategoryBracelet, CategoryRing, CategoryBangle,
+		CategoryEarring, CategoryPendant, CategoryAmulet:
+		return true
+	}
+	return false
+}
 
 // Thai gold weight standards differ by product kind:
 //
@@ -67,7 +92,9 @@ type Product struct {
 	GoldType         string             `json:"gold_type" bson:"gold_type"`
 	Name             string             `json:"name" bson:"name"`
 	Description      string             `json:"description,omitempty" bson:"description,omitempty"`
-	Design           string             `json:"design,omitempty" bson:"design,omitempty"`               // ornament-only
+	Note             string             `json:"note,omitempty" bson:"note,omitempty"`                   // operational notes (separate from public-facing description)
+	Category         ProductCategory    `json:"category,omitempty" bson:"category,omitempty"`           // ornament-only enum
+	Design           string             `json:"design,omitempty" bson:"design,omitempty"`               // ornament-only free-text (e.g. "ลายโซ่")
 	BarSizeBaht      *float64           `json:"bar_size_baht,omitempty" bson:"bar_size_baht,omitempty"` // bar-only
 	DefaultLaborCost float64            `json:"default_labor_cost" bson:"default_labor_cost"`           // ornament-only
 	Images           []string           `json:"images" bson:"images"`

@@ -108,7 +108,7 @@ type SaleRepository interface {
 	GetByCustomerID(ctx context.Context, customerID primitive.ObjectID, limit int) ([]*entity.Sale, error)
 	GetByDateRange(ctx context.Context, branchID primitive.ObjectID, from, to string) ([]*entity.Sale, error)
 	Update(ctx context.Context, sale *entity.Sale) error
-	GenerateSaleNumber(ctx context.Context, branchCode string) (string, error)
+	GenerateSaleNumber(ctx context.Context, branchCode string, saleType entity.SaleType) (string, error)
 	SumByBranchAndDateRange(ctx context.Context, branchID primitive.ObjectID, from, to string) (float64, error)
 	CountByBranchAndDateRange(ctx context.Context, branchID primitive.ObjectID, from, to string) (int64, error)
 	SumCostByBranchAndDateRange(ctx context.Context, branchID primitive.ObjectID, from, to string) (float64, error)

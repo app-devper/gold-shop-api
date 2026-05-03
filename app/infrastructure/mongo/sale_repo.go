@@ -172,17 +172,40 @@ func (r *SaleRepository) Update(ctx context.Context, sale *entity.Sale) error {
 	return nil
 }
 
-// GenerateSaleNumber generates a unique sale number using atomic counter
-func (r *SaleRepository) GenerateSaleNumber(ctx context.Context, branchCode string) (string, error) {
-	today := time.Now().Format("20060102")
-	counterKey := fmt.Sprintf("sale-%s-%s", branchCode, today)
+// GenerateSaleNumber returns a unique sale number using an atomic per-day
+// counter, formatted per SRS 6.2:
+//
+//	sell      → S{YYMMDD}{XXXX}    (e.g. S260503001)
+//	buy_old   → B{YYMMDD}{XXXX}
+//	exchange  → TR{YYMMDD}{XXXX}
+//
+// branchCode is folded into the counter key so two branches running concurrently
+// don't collide on the same daily sequence, but it is intentionally NOT in the
+// final number string (the SRS format omits it).
+func (r *SaleRepository) GenerateSaleNumber(ctx context.Context, branchCode string, saleType entity.SaleType) (string, error) {
+	now := time.Now()
+	today := now.Format("20060102")
+	yymmdd := now.Format("060102")
+
+	prefix := saleNumberPrefix(saleType)
+	counterKey := fmt.Sprintf("sale-%s-%s-%s", prefix, branchCode, today)
 
 	nextNum, err := r.counter.NextSequence(ctx, counterKey)
 	if err != nil {
 		return "", err
 	}
+	return fmt.Sprintf("%s%s%04d", prefix, yymmdd, nextNum), nil
+}
 
-	return fmt.Sprintf("%s-%s-%04d", branchCode, today, nextNum), nil
+func saleNumberPrefix(t entity.SaleType) string {
+	switch t {
+	case entity.SaleTypeBuyOld:
+		return "B"
+	case entity.SaleTypeExchange:
+		return "TR"
+	default:
+		return "S"
+	}
 }
 
 // SumByBranchAndDateRange calculates total net sales for a branch and date range

@@ -6,7 +6,7 @@ import (
 
 	"github.com/devper-gold/gold-shop-api/app/domain/entity"
 	"github.com/devper-gold/gold-shop-api/app/domain/repository"
-	"github.com/devper-gold/gold-shop-api/pkg/utils"
+	"github.com/devper-gold/gold-shop-api/app/feature/pricing"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
@@ -50,20 +50,21 @@ func NewService(
 
 // CreateSaleInput represents input for creating a sale
 type CreateSaleInput struct {
-	BranchID     primitive.ObjectID
-	UserID       primitive.ObjectID
-	CustomerID   string
-	SaleType     entity.SaleType
-	Items        []SaleItemInput
-	OldGoldItems []OldGoldInput
-	Discount     float64
-	DiscountType entity.DiscountType
-	Payments     []PaymentInput
-	PointsUsed   int
-	Notes        string
+	BranchID           primitive.ObjectID
+	UserID             primitive.ObjectID
+	CustomerID         string
+	SaleType           entity.SaleType
+	Items              []SaleItemInput
+	OldGoldItems       []OldGoldInput
+	OldItemDestination entity.OldItemDestination // for buy_old / exchange
+	Discount           float64
+	DiscountType       entity.DiscountType
+	Payments           []PaymentInput
+	PointsUsed         int
+	Notes              string
 }
 
-// SaleItemInput represents input for a sale item
+// SaleItemInput represents input for a sale item.
 type SaleItemInput struct {
 	ProductID     string
 	ProductItemID string
@@ -76,10 +77,13 @@ type SaleItemInput struct {
 
 // OldGoldInput represents input for old gold
 type OldGoldInput struct {
-	Description  string
-	GoldType     string
-	Weight       float64
-	PricePerUnit float64
+	Description      string
+	GoldType         string
+	Kind             entity.ProductKind
+	Condition        entity.OldGoldCondition
+	Weight           float64
+	PricePerUnit     float64
+	DeductionPercent float64
 }
 
 // PaymentInput represents input for a payment
@@ -96,14 +100,6 @@ type resolvedItem struct {
 	productItem   *entity.ProductItem // non-nil for piece-based
 	productItemID *primitive.ObjectID
 	weight        float64
-}
-
-// calculateGramPrice returns the per-gram sell price based on the product's gold type
-func calculateGramPrice(goldPrice *entity.GoldPrice, product *entity.Product) float64 {
-	if product.IsBarGold() {
-		return goldPrice.GoldBarSell / entity.BahtPerGramBar
-	}
-	return goldPrice.GoldOrnamentSell / entity.BahtPerGramOrnament
 }
 
 // Create creates a new sale using a two-phase approach:
@@ -126,6 +122,7 @@ func (s *Service) Create(ctx context.Context, input CreateSaleInput) (*entity.Sa
 	sale.DiscountType = input.DiscountType
 	sale.PointsUsed = input.PointsUsed
 	sale.Notes = input.Notes
+	sale.OldItemDestination = input.OldItemDestination
 
 	// Set customer if provided
 	if input.CustomerID != "" {
@@ -140,6 +137,7 @@ func (s *Service) Create(ctx context.Context, input CreateSaleInput) (*entity.Sa
 	if err != nil || goldPrice == nil {
 		return nil, errors.New("could not fetch current gold price")
 	}
+	sale.GoldPrice = entity.NewGoldPriceSnapshot(goldPrice)
 
 	// ── Phase 1: Validate all items (no DB writes) ──
 	resolved := make([]resolvedItem, 0, len(input.Items))
@@ -184,45 +182,35 @@ func (s *Service) Create(ctx context.Context, input CreateSaleInput) (*entity.Sa
 		}
 
 		weight := productItem.WeightGrams
-		laborCost := productItem.LaborCost
-		gramPrice := calculateGramPrice(goldPrice, product)
-		unitPrice := gramPrice * weight
-
-		// Use manual price if provided (overwrites dynamic price)
-		if itemInput.Price != nil {
-			unitPrice = *itemInput.Price
+		quote, err := pricing.CalculateSellLine(
+			goldPrice,
+			product,
+			weight,
+			productItem.LaborCost,
+			itemInput.Discount,
+			itemInput.DiscountType,
+			itemInput.Price,
+		)
+		if err != nil {
+			return nil, err
 		}
-
-		if itemInput.Discount < 0 {
-			return nil, errors.New("item discount cannot be negative")
-		}
-
-		total := unitPrice + laborCost
-		if itemInput.Discount > 0 {
-			if itemInput.DiscountType == entity.DiscountTypePercent {
-				total -= total * (itemInput.Discount / 100)
-			} else {
-				total -= itemInput.Discount
-			}
-		}
-		if total < 0 {
-			total = 0
-		}
-		total = utils.RoundBaht(total)
 
 		saleItem := entity.SaleItem{
 			ProductID:     productID,
 			ProductItemID: productItemID,
 			ProductName:   product.Name,
+			Barcode:       productItem.Barcode,
+			SerialNumber:  productItem.SerialNumber,
 			GoldType:      product.GoldType,
 			Weight:        weight,
 			PriceLevel:    itemInput.PriceLevel,
-			UnitPrice:     utils.RoundBaht(unitPrice),
-			LaborCost:     utils.RoundBaht(laborCost),
+			PricePerGram:  quote.PricePerGram,
+			UnitPrice:     quote.GoldValue,
+			LaborCost:     quote.LaborCost,
 			Discount:      itemInput.Discount,
 			DiscountType:  itemInput.DiscountType,
 			Cost:          productItem.Cost,
-			Total:         total,
+			Total:         quote.Total,
 		}
 
 		resolved = append(resolved, resolvedItem{
@@ -236,12 +224,31 @@ func (s *Service) Create(ctx context.Context, input CreateSaleInput) (*entity.Sa
 
 	// Process old gold items (for buy_old or exchange)
 	for _, oldGold := range input.OldGoldItems {
+		kind := oldGold.Kind
+		if kind == "" {
+			kind = entity.KindOrnament
+		}
+		buybackQuote, err := pricing.CalculateBuyback(
+			goldPrice,
+			kind,
+			oldGold.Weight,
+			oldGold.DeductionPercent,
+			oldGold.PricePerUnit,
+		)
+		if err != nil {
+			return nil, err
+		}
 		oldGoldItem := entity.OldGoldItem{
-			Description:  oldGold.Description,
-			GoldType:     oldGold.GoldType,
-			Weight:       oldGold.Weight,
-			PricePerUnit: oldGold.PricePerUnit,
-			Total:        utils.RoundBaht(oldGold.Weight * oldGold.PricePerUnit),
+			Description:      oldGold.Description,
+			GoldType:         oldGold.GoldType,
+			Kind:             kind,
+			Condition:        oldGold.Condition,
+			Weight:           oldGold.Weight,
+			PricePerUnit:     buybackQuote.PricePerGram,
+			GrossTotal:       buybackQuote.GrossTotal,
+			DeductionPercent: buybackQuote.DeductionPercent,
+			DeductionAmount:  buybackQuote.DeductionAmount,
+			Total:            buybackQuote.NetTotal,
 		}
 		sale.AddOldGoldItem(oldGoldItem)
 	}
@@ -287,7 +294,7 @@ func (s *Service) Create(ctx context.Context, input CreateSaleInput) (*entity.Sa
 	// ── Phase 2: Apply all DB mutations inside a transaction ──
 	txErr := s.txManager.WithTransaction(ctx, func(txCtx context.Context) error {
 		// Generate sale number inside the transaction so it rolls back on failure
-		saleNumber, err := s.saleRepo.GenerateSaleNumber(txCtx, branch.Code)
+		saleNumber, err := s.saleRepo.GenerateSaleNumber(txCtx, branch.Code, sale.SaleType)
 		if err != nil {
 			return errors.New("failed to generate sale number")
 		}

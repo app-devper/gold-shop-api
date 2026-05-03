@@ -24,15 +24,16 @@ func NewSaleHandler(saleService *sale.Service) *SaleHandler {
 
 // CreateSaleRequest represents create sale request
 type CreateSaleRequest struct {
-	CustomerID   string            `json:"customer_id"`
-	SaleType     string            `json:"sale_type" binding:"required"`
-	Items        []SaleItemRequest `json:"items" binding:"required"`
-	OldGoldItems []OldGoldRequest  `json:"old_gold_items"`
-	Discount     float64           `json:"discount"`
-	DiscountType string            `json:"discount_type"`
-	Payments     []PaymentRequest  `json:"payments" binding:"required"`
-	PointsUsed   int               `json:"points_used"`
-	Notes        string            `json:"notes"`
+	CustomerID         string            `json:"customer_id"`
+	SaleType           string            `json:"sale_type" binding:"required"`
+	Items              []SaleItemRequest `json:"items" binding:"required"`
+	OldGoldItems       []OldGoldRequest  `json:"old_gold_items"`
+	OldItemDestination string            `json:"old_item_destination"` // melt | resell | scrap
+	Discount           float64           `json:"discount"`
+	DiscountType       string            `json:"discount_type"`
+	Payments           []PaymentRequest  `json:"payments" binding:"required"`
+	PointsUsed         int               `json:"points_used"`
+	Notes              string            `json:"notes"`
 }
 
 // SaleItemRequest represents a sale item in request
@@ -48,10 +49,13 @@ type SaleItemRequest struct {
 
 // OldGoldRequest represents old gold in request
 type OldGoldRequest struct {
-	Description  string  `json:"description"`
-	GoldType     string  `json:"gold_type"`
-	Weight       float64 `json:"weight"`
-	PricePerUnit float64 `json:"price_per_unit"`
+	Description      string  `json:"description"`
+	GoldType         string  `json:"gold_type"`
+	Kind             string  `json:"kind"`
+	Condition        string  `json:"condition"` // good | fair | damaged
+	Weight           float64 `json:"weight"`
+	PricePerUnit     float64 `json:"price_per_unit"`
+	DeductionPercent float64 `json:"deduction_percent"`
 }
 
 // PaymentRequest represents payment in request
@@ -118,14 +122,15 @@ func (h *SaleHandler) Create(c *gin.Context) {
 	userID, _ := primitive.ObjectIDFromHex(c.GetString("UserId"))
 
 	input := sale.CreateSaleInput{
-		BranchID:     branchID,
-		UserID:       userID,
-		CustomerID:   req.CustomerID,
-		SaleType:     entity.SaleType(req.SaleType),
-		Discount:     req.Discount,
-		DiscountType: entity.DiscountType(req.DiscountType),
-		PointsUsed:   req.PointsUsed,
-		Notes:        req.Notes,
+		BranchID:           branchID,
+		UserID:             userID,
+		CustomerID:         req.CustomerID,
+		SaleType:           entity.SaleType(req.SaleType),
+		OldItemDestination: entity.OldItemDestination(req.OldItemDestination),
+		Discount:           req.Discount,
+		DiscountType:       entity.DiscountType(req.DiscountType),
+		PointsUsed:         req.PointsUsed,
+		Notes:              req.Notes,
 	}
 
 	// Convert items
@@ -144,10 +149,13 @@ func (h *SaleHandler) Create(c *gin.Context) {
 	// Convert old gold items
 	for _, item := range req.OldGoldItems {
 		input.OldGoldItems = append(input.OldGoldItems, sale.OldGoldInput{
-			Description:  item.Description,
-			GoldType:     item.GoldType,
-			Weight:       item.Weight,
-			PricePerUnit: item.PricePerUnit,
+			Description:      item.Description,
+			GoldType:         item.GoldType,
+			Kind:             entity.ProductKind(item.Kind),
+			Condition:        entity.OldGoldCondition(item.Condition),
+			Weight:           item.Weight,
+			PricePerUnit:     item.PricePerUnit,
+			DeductionPercent: item.DeductionPercent,
 		})
 	}
 

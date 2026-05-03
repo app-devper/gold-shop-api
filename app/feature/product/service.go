@@ -53,9 +53,11 @@ type CreateProductInput struct {
 	GoldType         string
 	Name             string
 	Description      string
-	Design           string   // ornament-only
-	BarSizeBaht      *float64 // bar-only
-	DefaultLaborCost float64  // ornament-only
+	Note             string                  // operational note
+	Category         entity.ProductCategory  // ornament-only
+	Design           string                  // ornament-only free text
+	BarSizeBaht      *float64                // bar-only
+	DefaultLaborCost float64                 // ornament-only
 	Images           []string
 }
 
@@ -72,11 +74,13 @@ func (s *Service) CreateProduct(ctx context.Context, in CreateProductInput) (*en
 	switch in.Kind {
 	case entity.KindOrnament:
 		product = entity.NewOrnamentProduct(in.BranchID, in.SKU, in.Name, in.Design, in.GoldType, in.DefaultLaborCost)
+		product.Category = in.Category
 	case entity.KindBar:
 		product = entity.NewBarProduct(in.BranchID, in.SKU, in.Name, in.GoldType, *in.BarSizeBaht)
 	}
 	product.Code = in.Code
 	product.Description = in.Description
+	product.Note = in.Note
 	if in.Images != nil {
 		product.Images = in.Images
 	}
@@ -92,6 +96,8 @@ func (s *Service) CreateProduct(ctx context.Context, in CreateProductInput) (*en
 type UpdateProductInput struct {
 	Name             *string
 	Description      *string
+	Note             *string
+	Category         *entity.ProductCategory
 	Design           *string
 	DefaultLaborCost *float64
 	BarSizeBaht      *float64
@@ -110,9 +116,18 @@ func (s *Service) UpdateProduct(ctx context.Context, id primitive.ObjectID, in U
 	if in.Description != nil {
 		product.Description = *in.Description
 	}
+	if in.Note != nil {
+		product.Note = *in.Note
+	}
 	if product.Kind == entity.KindOrnament {
 		if in.Design != nil {
 			product.Design = *in.Design
+		}
+		if in.Category != nil {
+			if !entity.IsValidProductCategory(*in.Category) {
+				return nil, errors.New("invalid product category")
+			}
+			product.Category = *in.Category
 		}
 		if in.DefaultLaborCost != nil {
 			product.DefaultLaborCost = *in.DefaultLaborCost
@@ -359,6 +374,9 @@ func validateCreate(in *CreateProductInput) error {
 	case entity.KindOrnament:
 		if in.DefaultLaborCost < 0 {
 			return errors.New("default_labor_cost must be non-negative")
+		}
+		if !entity.IsValidProductCategory(in.Category) {
+			return errors.New("invalid product category")
 		}
 	case entity.KindBar:
 		if in.BarSizeBaht == nil || *in.BarSizeBaht <= 0 {

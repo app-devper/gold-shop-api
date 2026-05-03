@@ -43,14 +43,67 @@ const (
 	PaymentMethodVoucher    PaymentMethod = "voucher"
 )
 
-// SaleItem represents an item in a sale
+// OldGoldCondition rates the physical state of customer-supplied gold (SRS 3.7).
+// Affects how much the shop deducts before paying out.
+type OldGoldCondition string
+
+const (
+	OldGoldConditionGood     OldGoldCondition = "good"
+	OldGoldConditionFair     OldGoldCondition = "fair"
+	OldGoldConditionDamaged  OldGoldCondition = "damaged"
+)
+
+// OldItemDestination tracks where customer-traded-in gold goes after the sale
+// (SRS 3.7) — used for audit and inventory routing.
+type OldItemDestination string
+
+const (
+	OldItemDestinationMelt   OldItemDestination = "melt"   // ส่งหลอม
+	OldItemDestinationResell OldItemDestination = "resell" // เข้าสต็อกขายต่อ
+	OldItemDestinationScrap  OldItemDestination = "scrap"  // เก็บเป็นเศษ
+)
+
+// GoldPriceSnapshot captures the exact gold price used by a transaction.
+// Sales must store this instead of relying on the mutable current price later.
+type GoldPriceSnapshot struct {
+	GoldPriceID      primitive.ObjectID `json:"gold_price_id,omitempty" bson:"gold_price_id,omitempty"`
+	Date             time.Time          `json:"date" bson:"date"`
+	GoldBarBuy       float64            `json:"gold_bar_buy" bson:"gold_bar_buy"`
+	GoldBarSell      float64            `json:"gold_bar_sell" bson:"gold_bar_sell"`
+	GoldOrnamentBuy  float64            `json:"gold_ornament_buy" bson:"gold_ornament_buy"`
+	GoldOrnamentSell float64            `json:"gold_ornament_sell" bson:"gold_ornament_sell"`
+	Source           string             `json:"source" bson:"source"`
+	CapturedAt       time.Time          `json:"captured_at" bson:"captured_at"`
+}
+
+// NewGoldPriceSnapshot creates an immutable price copy for sale records.
+func NewGoldPriceSnapshot(price *GoldPrice) GoldPriceSnapshot {
+	if price == nil {
+		return GoldPriceSnapshot{}
+	}
+	return GoldPriceSnapshot{
+		GoldPriceID:      price.ID,
+		Date:             price.Date,
+		GoldBarBuy:       price.GoldBarBuy,
+		GoldBarSell:      price.GoldBarSell,
+		GoldOrnamentBuy:  price.GoldOrnamentBuy,
+		GoldOrnamentSell: price.GoldOrnamentSell,
+		Source:           price.Source,
+		CapturedAt:       time.Now(),
+	}
+}
+
+// SaleItem represents an item in a sale.
 type SaleItem struct {
 	ProductID     primitive.ObjectID  `json:"product_id" bson:"product_id"`
 	ProductItemID *primitive.ObjectID `json:"product_item_id,omitempty" bson:"product_item_id,omitempty"`
 	ProductName   string              `json:"product_name" bson:"product_name"`
+	Barcode       string              `json:"barcode,omitempty" bson:"barcode,omitempty"`
+	SerialNumber  string              `json:"serial_number,omitempty" bson:"serial_number,omitempty"`
 	GoldType      string              `json:"gold_type" bson:"gold_type"`
 	Weight        float64             `json:"weight" bson:"weight"`
 	PriceLevel    string              `json:"price_level" bson:"price_level"`
+	PricePerGram  float64             `json:"price_per_gram" bson:"price_per_gram"`
 	UnitPrice     float64             `json:"unit_price" bson:"unit_price"`
 	LaborCost     float64             `json:"labor_cost" bson:"labor_cost"`
 	Discount      float64             `json:"discount" bson:"discount"`
@@ -61,11 +114,16 @@ type SaleItem struct {
 
 // OldGoldItem represents old gold being traded in
 type OldGoldItem struct {
-	Description  string  `json:"description" bson:"description"`
-	GoldType     string  `json:"gold_type" bson:"gold_type"`
-	Weight       float64 `json:"weight" bson:"weight"`
-	PricePerUnit float64 `json:"price_per_unit" bson:"price_per_unit"`
-	Total        float64 `json:"total" bson:"total"`
+	Description      string           `json:"description" bson:"description"`
+	GoldType         string           `json:"gold_type" bson:"gold_type"`
+	Kind             ProductKind      `json:"kind" bson:"kind"`
+	Condition        OldGoldCondition `json:"condition,omitempty" bson:"condition,omitempty"`
+	Weight           float64          `json:"weight" bson:"weight"`
+	PricePerUnit     float64          `json:"price_per_unit" bson:"price_per_unit"`
+	GrossTotal       float64          `json:"gross_total" bson:"gross_total"`
+	DeductionPercent float64          `json:"deduction_percent" bson:"deduction_percent"`
+	DeductionAmount  float64          `json:"deduction_amount" bson:"deduction_amount"`
+	Total            float64          `json:"total" bson:"total"`
 }
 
 // Payment represents a payment in a sale
@@ -77,26 +135,28 @@ type Payment struct {
 
 // Sale represents a sales transaction
 type Sale struct {
-	ID           primitive.ObjectID  `json:"id" bson:"_id,omitempty"`
-	BranchID     primitive.ObjectID  `json:"branch_id" bson:"branch_id"`
-	SaleNumber   string              `json:"sale_number" bson:"sale_number"`
-	CustomerID   *primitive.ObjectID `json:"customer_id,omitempty" bson:"customer_id,omitempty"`
-	UserID       primitive.ObjectID  `json:"user_id" bson:"user_id"`
-	SaleType     SaleType            `json:"sale_type" bson:"sale_type"`
-	Items        []SaleItem          `json:"items" bson:"items"`
-	OldGoldItems []OldGoldItem       `json:"old_gold_items,omitempty" bson:"old_gold_items,omitempty"`
-	Subtotal     float64             `json:"subtotal" bson:"subtotal"`
-	Discount     float64             `json:"discount" bson:"discount"`
-	DiscountType DiscountType        `json:"discount_type" bson:"discount_type"`
-	OldGoldValue float64             `json:"old_gold_value" bson:"old_gold_value"`
-	NetTotal     float64             `json:"net_total" bson:"net_total"`
-	Payments     []Payment           `json:"payments" bson:"payments"`
-	PointsEarned int                 `json:"points_earned" bson:"points_earned"`
-	PointsUsed   int                 `json:"points_used" bson:"points_used"`
-	Status       SaleStatus          `json:"status" bson:"status"`
-	Notes        string              `json:"notes,omitempty" bson:"notes,omitempty"`
-	CreatedAt    time.Time           `json:"created_at" bson:"created_at"`
-	UpdatedAt    time.Time           `json:"updated_at" bson:"updated_at"`
+	ID                 primitive.ObjectID  `json:"id" bson:"_id,omitempty"`
+	BranchID           primitive.ObjectID  `json:"branch_id" bson:"branch_id"`
+	SaleNumber         string              `json:"sale_number" bson:"sale_number"`
+	CustomerID         *primitive.ObjectID `json:"customer_id,omitempty" bson:"customer_id,omitempty"`
+	UserID             primitive.ObjectID  `json:"user_id" bson:"user_id"`
+	SaleType           SaleType            `json:"sale_type" bson:"sale_type"`
+	GoldPrice          GoldPriceSnapshot   `json:"gold_price" bson:"gold_price"`
+	Items              []SaleItem          `json:"items" bson:"items"`
+	OldGoldItems       []OldGoldItem       `json:"old_gold_items,omitempty" bson:"old_gold_items,omitempty"`
+	OldItemDestination OldItemDestination  `json:"old_item_destination,omitempty" bson:"old_item_destination,omitempty"` // for buy_old / exchange
+	Subtotal           float64             `json:"subtotal" bson:"subtotal"`
+	Discount           float64             `json:"discount" bson:"discount"`
+	DiscountType       DiscountType        `json:"discount_type" bson:"discount_type"`
+	OldGoldValue       float64             `json:"old_gold_value" bson:"old_gold_value"`
+	NetTotal           float64             `json:"net_total" bson:"net_total"`
+	Payments           []Payment           `json:"payments" bson:"payments"`
+	PointsEarned       int                 `json:"points_earned" bson:"points_earned"`
+	PointsUsed         int                 `json:"points_used" bson:"points_used"`
+	Status             SaleStatus          `json:"status" bson:"status"`
+	Notes              string              `json:"notes,omitempty" bson:"notes,omitempty"`
+	CreatedAt          time.Time           `json:"created_at" bson:"created_at"`
+	UpdatedAt          time.Time           `json:"updated_at" bson:"updated_at"`
 }
 
 // NewSale creates a new Sale entity

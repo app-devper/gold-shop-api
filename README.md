@@ -149,6 +149,8 @@ All endpoints are prefixed with `/api/v1` and require `Authorization: Bearer <to
 | `POST` | `/sales/:id/cancel` | Any | Cancel sale |
 | `GET` | `/sales/:id/receipt` | Any | Get receipt |
 
+> **Sale number format** (SRS 6.2): `<prefix>{YYMMDD}{XXXX}` where the prefix encodes `sale_type` — `S` (sell), `B` (buy_old), `TR` (exchange). The 4-digit sequence is per-day, per-prefix, per-branch. For `buy_old` and `exchange`, also send `old_item_destination` (`melt` / `resell` / `scrap`) and per-item `condition` (`good` / `fair` / `damaged`) on each `OldGoldItem`. See OpenAPI for the full schema.
+
 ### 💍 Pawns
 | Method | Path | Role | Description |
 |---|---|---|---|
@@ -182,6 +184,8 @@ All endpoints are prefixed with `/api/v1` and require `Authorization: Bearer <to
 | `POST` | `/products` | ADMIN, MANAGER | Create product |
 | `PUT` | `/products/:id` | ADMIN, MANAGER | Update product |
 | `DELETE` | `/products/:id` | ADMIN, MANAGER | Delete product |
+
+> **Ornament categories** (SRS 3.2): when creating an ornament product, send the optional `category` enum — one of `necklace`, `bracelet`, `ring`, `bangle`, `earring`, `pendant`, `amulet`. Bar products do not take a category. The `note` field is an internal staff note, separate from the customer-facing `description`.
 
 ### 🧑‍🤝‍🧑 Customers
 | Method | Path | Role | Description |
