@@ -71,9 +71,9 @@ func TestCreateSale(t *testing.T) {
 		sale, err := service.Create(ctx, input)
 		assert.NoError(t, err)
 		assert.NotNil(t, sale)
-		// ornament uses sell ornament price = 30500/15.244 ≈ 2001.44 ฿/g; 7.6g + labor 500
-		// total ≈ 7.6 × 2001.44 + 500 = 15710.94
-		assert.InDelta(t, 15710.94, sale.NetTotal, 5)
+		// ornament uses sell ornament price = 30500/15.16 ≈ 2012.53 ฿/g; 7.6g + labor 500
+		// total ≈ 7.6 × 2012.53 + 500 = 15795.24
+		assert.InDelta(t, 15795.24, sale.NetTotal, 5)
 		assert.Equal(t, 14000.0, sale.Items[0].Cost)
 
 		mockItemRepo.AssertExpectations(t)

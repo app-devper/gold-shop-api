@@ -27,13 +27,24 @@ const (
 	KindBar      ProductKind = "bar"
 )
 
+// Thai gold weight standards differ by product kind:
+//
+//	Bar      — 1 บาท = 15.244 g (cast/poured pure metal; 96.5%–99.99% purity)
+//	Ornament — 1 บาท = 15.16 g  (includes loops/clasps/alloy in the rounded total)
+//
+// Use BahtPerGramFor(kind) to pick the right ratio in business code.
 const (
-	// 1 บาททอง = 15.244 g (Thai market standard, applies to both 96.5% and 99.99%).
-	BahtPerGram = 15.244
-	// Legacy aliases retained for sale.go imports while we migrate; both equal 15.244.
-	BahtPerGramOrnament = BahtPerGram
-	BahtPerGramBar      = BahtPerGram
+	BahtPerGramBar      = 15.244
+	BahtPerGramOrnament = 15.16
 )
+
+// BahtPerGramFor returns the per-baht weight ratio for the given kind.
+func BahtPerGramFor(kind ProductKind) float64 {
+	if kind == KindOrnament {
+		return BahtPerGramOrnament
+	}
+	return BahtPerGramBar
+}
 
 // IsBarGold returns true when the product is sold as a gold bar.
 func (p *Product) IsBarGold() bool {
@@ -109,7 +120,7 @@ func NewBarProduct(branchID primitive.ObjectID, sku, name, goldType string, barS
 //   - ornament: 0 (operator must enter actual weight at item creation)
 func (p *Product) DefaultItemWeightGrams() float64 {
 	if p.Kind == KindBar && p.BarSizeBaht != nil {
-		return *p.BarSizeBaht * BahtPerGram
+		return *p.BarSizeBaht * BahtPerGramBar
 	}
 	return 0
 }

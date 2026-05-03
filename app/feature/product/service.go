@@ -19,7 +19,7 @@ import (
 //	ornament — Design (free text), DefaultLaborCost; per-item weight is entered
 //	           manually because every piece is unique.
 //	bar      — BarSizeBaht (free input). New items default to BarSizeBaht ×
-//	           BahtPerGram (15.244 g/baht); operator may override per item.
+//	           BahtPerGramBar (15.244 g/baht); operator may override per item.
 type Service struct {
 	productRepo  repository.ProductRepository
 	itemRepo     repository.ProductItemRepository
