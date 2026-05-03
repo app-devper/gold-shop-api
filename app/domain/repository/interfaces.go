@@ -60,28 +60,14 @@ type CustomerRepository interface {
 	Count(ctx context.Context) (int64, error)
 }
 
-// ProductCategoryRepository defines product category operations
-type ProductCategoryRepository interface {
-	Create(ctx context.Context, category *entity.ProductCategory) error
-	GetByID(ctx context.Context, id primitive.ObjectID) (*entity.ProductCategory, error)
-	GetAll(ctx context.Context) ([]*entity.ProductCategory, error)
-	Update(ctx context.Context, category *entity.ProductCategory) error
-	Delete(ctx context.Context, id primitive.ObjectID) error
-}
-
-// ProductRepository defines product data operations
+// ProductRepository defines product (catalog) data operations.
+// Stock is held entirely on ProductItems; the master never carries weight/price.
 type ProductRepository interface {
 	Create(ctx context.Context, product *entity.Product) error
 	GetByID(ctx context.Context, id primitive.ObjectID) (*entity.Product, error)
 	GetBySKU(ctx context.Context, sku string) (*entity.Product, error)
-	GetByBarcode(ctx context.Context, barcode string) (*entity.Product, error)
-	GetByBranchID(ctx context.Context, branchID primitive.ObjectID, status []entity.ProductStatus, limit, offset int) ([]*entity.Product, error)
-	GetByCategoryID(ctx context.Context, categoryID primitive.ObjectID) ([]*entity.Product, error)
-	Search(ctx context.Context, branchID primitive.ObjectID, query string, limit int) ([]*entity.Product, error)
-	GetLowStock(ctx context.Context, branchID primitive.ObjectID) ([]*entity.Product, error)
+	GetByBranchID(ctx context.Context, branchID primitive.ObjectID, kind entity.ProductKind, search string, limit, offset int) ([]*entity.Product, error)
 	Update(ctx context.Context, product *entity.Product) error
-	DeductWeight(ctx context.Context, id primitive.ObjectID, amount float64) error
-	AddWeight(ctx context.Context, id primitive.ObjectID, amount float64) error
 	Delete(ctx context.Context, id primitive.ObjectID) error
 	Count(ctx context.Context, branchID primitive.ObjectID) (int64, error)
 }

@@ -78,9 +78,11 @@ func (s *Service) CreateTransfer(ctx context.Context, req CreateTransferRequest)
 		if product.BranchID != fromBranchOID {
 			return nil, fmt.Errorf("product %s does not belong to source branch", product.Name)
 		}
-		if product.Status != entity.ProductStatusAvailable {
-			return nil, fmt.Errorf("product %s is not available (status: %s)", product.Name, product.Status)
+		if !product.IsActive {
+			return nil, fmt.Errorf("product %s is not active", product.Name)
 		}
+		// TODO: inventory transfer should move ProductItems (with status), not Product masters.
+		// In v2 product model, the master has no status — verify items are available here.
 
 		resolved = append(resolved, product)
 	}
@@ -101,7 +103,7 @@ func (s *Service) CreateTransfer(ctx context.Context, req CreateTransferRequest)
 			return err
 		}
 		for _, product := range resolved {
-			product.Status = entity.ProductStatusReserved
+			// Master has no status in v2; reservation should flip ProductItems instead (TODO).
 			product.UpdatedAt = time.Now()
 			if err := s.productRepo.Update(txCtx, product); err != nil {
 				return fmt.Errorf("failed to reserve product %s: %w", product.Name, err)
@@ -188,7 +190,7 @@ func (s *Service) ReceiveTransfer(ctx context.Context, id, userID string) error 
 				return fmt.Errorf("product not found during receive: %s", item.ProductID.Hex())
 			}
 			product.BranchID = transfer.ToBranchID
-			product.Status = entity.ProductStatusAvailable
+			// Master has no status in v2 (TODO: flip ProductItems back).
 			product.UpdatedAt = time.Now()
 			if err := s.productRepo.Update(txCtx, product); err != nil {
 				return err
@@ -223,7 +225,7 @@ func (s *Service) CancelTransfer(ctx context.Context, id string) error {
 			}
 			// Restore at the source branch — products were reserved there but never moved.
 			product.BranchID = transfer.FromBranchID
-			product.Status = entity.ProductStatusAvailable
+			// Master has no status in v2 (TODO: flip ProductItems back).
 			product.UpdatedAt = time.Now()
 			if err := s.productRepo.Update(txCtx, product); err != nil {
 				return err

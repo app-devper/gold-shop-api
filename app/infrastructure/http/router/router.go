@@ -117,21 +117,22 @@ func Setup(r *gin.Engine, secretKey string, sessionRepo middleware.SessionLookup
 			goldSavings.POST("/:id/adjust", middleware.RoleMiddleware(entity.EmployeeRoleAdmin), handlers.GoldSaving.Adjust)
 		}
 
-		// Product Categories
-		productCategories := protected.Group("/product-categories")
-		{
-			productCategories.GET("", handlers.Product.GetCategories)
-			productCategories.POST("", middleware.RoleMiddleware(entity.EmployeeRoleAdmin, entity.EmployeeRoleManager), handlers.Product.CreateCategory)
-		}
-
-		// Products
+		// Products (catalog masters + per-piece items)
 		products := protected.Group("/products")
 		{
+			mgr := middleware.RoleMiddleware(entity.EmployeeRoleAdmin, entity.EmployeeRoleManager)
 			products.GET("", handlers.Product.GetProducts)
 			products.GET("/:id", handlers.Product.GetProduct)
-			products.POST("", middleware.RoleMiddleware(entity.EmployeeRoleAdmin, entity.EmployeeRoleManager), handlers.Product.CreateProduct)
-			products.PUT("/:id", middleware.RoleMiddleware(entity.EmployeeRoleAdmin, entity.EmployeeRoleManager), handlers.Product.UpdateProduct)
-			products.DELETE("/:id", middleware.RoleMiddleware(entity.EmployeeRoleAdmin, entity.EmployeeRoleManager), handlers.Product.DeleteProduct)
+			products.POST("", mgr, handlers.Product.CreateProduct)
+			products.PUT("/:id", mgr, handlers.Product.UpdateProduct)
+			products.DELETE("/:id", mgr, handlers.Product.DeleteProduct)
+
+			// Item-level (each gold piece has its own barcode + status)
+			products.GET("/:id/items", handlers.Product.ListItems)
+			products.POST("/:id/items", mgr, handlers.Product.CreateItem)
+			products.POST("/:id/items/bulk", mgr, handlers.Product.BulkCreateItems)
+			products.PUT("/:id/items/:itemId", mgr, handlers.Product.UpdateItem)
+			products.DELETE("/:id/items/:itemId", mgr, handlers.Product.DeleteItem)
 		}
 
 		// Customers

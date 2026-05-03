@@ -126,46 +126,13 @@ func (m *MockProductRepository) GetBySKU(ctx context.Context, sku string) (*enti
 	return args.Get(0).(*entity.Product), args.Error(1)
 }
 
-func (m *MockProductRepository) GetByBarcode(ctx context.Context, barcode string) (*entity.Product, error) {
-	args := m.Called(ctx, barcode)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).(*entity.Product), args.Error(1)
-}
-
-func (m *MockProductRepository) GetByBranchID(ctx context.Context, branchID primitive.ObjectID, status []entity.ProductStatus, limit, offset int) ([]*entity.Product, error) {
-	args := m.Called(ctx, branchID, status, limit, offset)
-	return args.Get(0).([]*entity.Product), args.Error(1)
-}
-
-func (m *MockProductRepository) GetByCategoryID(ctx context.Context, categoryID primitive.ObjectID) ([]*entity.Product, error) {
-	args := m.Called(ctx, categoryID)
-	return args.Get(0).([]*entity.Product), args.Error(1)
-}
-
-func (m *MockProductRepository) Search(ctx context.Context, branchID primitive.ObjectID, query string, limit int) ([]*entity.Product, error) {
-	args := m.Called(ctx, branchID, query, limit)
-	return args.Get(0).([]*entity.Product), args.Error(1)
-}
-
-func (m *MockProductRepository) GetLowStock(ctx context.Context, branchID primitive.ObjectID) ([]*entity.Product, error) {
-	args := m.Called(ctx, branchID)
+func (m *MockProductRepository) GetByBranchID(ctx context.Context, branchID primitive.ObjectID, kind entity.ProductKind, search string, limit, offset int) ([]*entity.Product, error) {
+	args := m.Called(ctx, branchID, kind, search, limit, offset)
 	return args.Get(0).([]*entity.Product), args.Error(1)
 }
 
 func (m *MockProductRepository) Update(ctx context.Context, product *entity.Product) error {
 	args := m.Called(ctx, product)
-	return args.Error(0)
-}
-
-func (m *MockProductRepository) DeductWeight(ctx context.Context, id primitive.ObjectID, amount float64) error {
-	args := m.Called(ctx, id, amount)
-	return args.Error(0)
-}
-
-func (m *MockProductRepository) AddWeight(ctx context.Context, id primitive.ObjectID, amount float64) error {
-	args := m.Called(ctx, id, amount)
 	return args.Error(0)
 }
 

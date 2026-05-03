@@ -158,60 +158,35 @@ func (s *Service) Create(ctx context.Context, input CreateSaleInput) (*entity.Sa
 		if product.BranchID != input.BranchID {
 			return nil, errors.New("product does not belong to this branch")
 		}
-
-		if product.Status != entity.ProductStatusAvailable {
-			return nil, errors.New("product is not available for sale")
+		if !product.IsActive {
+			return nil, errors.New("product is no longer active")
 		}
 
-		var unitPrice float64
-		var laborCost float64
-		var weight float64
-		var productItemID *primitive.ObjectID
-		var productItem *entity.ProductItem
-
-		stockType := product.DefaultStockType()
-
-		if stockType == entity.StockTypePiece {
-			if itemInput.ProductItemID == "" {
-				return nil, errors.New("product item ID is required for piece-based products")
-			}
-			itemID, err := primitive.ObjectIDFromHex(itemInput.ProductItemID)
-			if err != nil {
-				return nil, errors.New("invalid product item ID")
-			}
-			productItemID = &itemID
-
-			productItem, err = s.itemRepo.GetByID(ctx, itemID)
-			if err != nil || productItem == nil {
-				return nil, errors.New("product item not found")
-			}
-			if productItem.ProductID != productID {
-				return nil, errors.New("item does not belong to the selected product")
-			}
-			if productItem.Status != entity.ProductStatusAvailable {
-				return nil, errors.New("item is not available")
-			}
-
-			weight = productItem.Weight
-			laborCost = productItem.LaborCost
-
-			gramPrice := calculateGramPrice(goldPrice, product)
-			unitPrice = gramPrice * weight
-		} else {
-			// Weight-based
-			if itemInput.Weight <= 0 {
-				return nil, errors.New("weight is required for weight-based products")
-			}
-			if product.Weight < itemInput.Weight {
-				return nil, errors.New("insufficient weight in stock")
-			}
-
-			weight = itemInput.Weight
-			laborCost = product.LaborCost
-
-			gramPrice := calculateGramPrice(goldPrice, product)
-			unitPrice = gramPrice * weight
+		// Every product is piece-based — operator must specify the exact item.
+		if itemInput.ProductItemID == "" {
+			return nil, errors.New("product item ID is required")
 		}
+		itemID, err := primitive.ObjectIDFromHex(itemInput.ProductItemID)
+		if err != nil {
+			return nil, errors.New("invalid product item ID")
+		}
+		productItemID := &itemID
+
+		productItem, err := s.itemRepo.GetByID(ctx, itemID)
+		if err != nil || productItem == nil {
+			return nil, errors.New("product item not found")
+		}
+		if productItem.ProductID != productID {
+			return nil, errors.New("item does not belong to the selected product")
+		}
+		if productItem.Status != entity.ProductStatusAvailable {
+			return nil, errors.New("item is not available")
+		}
+
+		weight := productItem.WeightGrams
+		laborCost := productItem.LaborCost
+		gramPrice := calculateGramPrice(goldPrice, product)
+		unitPrice := gramPrice * weight
 
 		// Use manual price if provided (overwrites dynamic price)
 		if itemInput.Price != nil {
@@ -246,7 +221,7 @@ func (s *Service) Create(ctx context.Context, input CreateSaleInput) (*entity.Sa
 			LaborCost:     utils.RoundBaht(laborCost),
 			Discount:      itemInput.Discount,
 			DiscountType:  itemInput.DiscountType,
-			Cost:          product.Cost,
+			Cost:          productItem.Cost,
 			Total:         total,
 		}
 
@@ -324,22 +299,9 @@ func (s *Service) Create(ctx context.Context, input CreateSaleInput) (*entity.Sa
 		}
 
 		for _, r := range resolved {
-			stockType := r.product.DefaultStockType()
-
-			if stockType == entity.StockTypePiece {
-				r.productItem.Status = entity.ProductStatusSold
-				if err := s.itemRepo.Update(txCtx, r.productItem); err != nil {
-					return errors.New("failed to update item status")
-				}
-			} else {
-				if err := s.productRepo.DeductWeight(txCtx, r.product.ID, r.weight); err != nil {
-					return errors.New("failed to update product stock: " + err.Error())
-				}
-				updated, err := s.productRepo.GetByID(txCtx, r.product.ID)
-				if err == nil && updated != nil && updated.Weight <= 0 {
-					updated.Status = entity.ProductStatusSold
-					s.productRepo.Update(txCtx, updated)
-				}
+			r.productItem.Status = entity.ProductStatusSold
+			if err := s.itemRepo.Update(txCtx, r.productItem); err != nil {
+				return errors.New("failed to update item status")
 			}
 
 			stockLog := entity.NewStockLog(input.BranchID, r.saleItem.ProductID, input.UserID, entity.StockActionSale, r.weight)
@@ -412,26 +374,20 @@ func (s *Service) Cancel(ctx context.Context, id primitive.ObjectID) error {
 	sale.Cancel()
 
 	return s.txManager.WithTransaction(ctx, func(txCtx context.Context) error {
-		// Restore product status or weight
+		// Restore each item to available; product master holds no balance to roll back.
 		for _, item := range sale.Items {
-			if item.ProductItemID != nil {
-				// Piece-based: restore item to available
-				productItem, err := s.itemRepo.GetByID(txCtx, *item.ProductItemID)
-				if err != nil || productItem == nil {
-					return errors.New("failed to find product item for cancellation")
-				}
-				productItem.Status = entity.ProductStatusAvailable
-				if err := s.itemRepo.Update(txCtx, productItem); err != nil {
-					return errors.New("failed to restore product item status")
-				}
-			} else {
-				// Weight-based: atomic weight restoration
-				if err := s.productRepo.AddWeight(txCtx, item.ProductID, item.Weight); err != nil {
-					return errors.New("failed to restore product weight")
-				}
+			if item.ProductItemID == nil {
+				return errors.New("legacy weight-based sale cannot be cancelled in this version")
+			}
+			productItem, err := s.itemRepo.GetByID(txCtx, *item.ProductItemID)
+			if err != nil || productItem == nil {
+				return errors.New("failed to find product item for cancellation")
+			}
+			productItem.Status = entity.ProductStatusAvailable
+			if err := s.itemRepo.Update(txCtx, productItem); err != nil {
+				return errors.New("failed to restore product item status")
 			}
 
-			// Record stock log for cancellation
 			stockLog := entity.NewStockLog(sale.BranchID, item.ProductID, sale.UserID, entity.StockActionCancel, item.Weight)
 			stockLog.ProductItemID = item.ProductItemID
 			stockLog.ReferenceID = sale.SaleNumber

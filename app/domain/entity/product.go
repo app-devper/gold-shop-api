@@ -6,7 +6,7 @@ import (
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
-// ProductStatus represents the status of a product
+// ProductStatus represents the status of a single physical gold item.
 type ProductStatus string
 
 const (
@@ -16,95 +16,110 @@ const (
 	ProductStatusPawned    ProductStatus = "pawned"
 )
 
-// StockType represents how a product's stock is counted
-type StockType string
+// ProductKind discriminates how a product is priced and described.
+//
+//	ornament — ทองรูปพรรณ; per-piece labor (ค่ากำเหน็จ); free-text Design.
+//	bar      — ทองคำแท่ง; no labor; weight derived from BarSizeBaht (× 15.244 g/baht).
+type ProductKind string
 
 const (
-	StockTypePiece  StockType = "piece"
-	StockTypeWeight StockType = "weight"
+	KindOrnament ProductKind = "ornament"
+	KindBar      ProductKind = "bar"
 )
 
 const (
-	// BahtPerGramOrnament is the baht-to-gram conversion factor for gold ornaments (96.5%)
-	BahtPerGramOrnament = 15.16
-	// BahtPerGramBar is the baht-to-gram conversion factor for gold bars (99.99%)
-	BahtPerGramBar = 15.244
+	// 1 บาททอง = 15.244 g (Thai market standard, applies to both 96.5% and 99.99%).
+	BahtPerGram = 15.244
+	// Legacy aliases retained for sale.go imports while we migrate; both equal 15.244.
+	BahtPerGramOrnament = BahtPerGram
+	BahtPerGramBar      = BahtPerGram
 )
 
-// IsBarGold returns true if the product's gold type is bar gold (99.99%)
+// IsBarGold returns true when the product is sold as a gold bar.
 func (p *Product) IsBarGold() bool {
-	return p.GoldType == "99.99%" || p.GoldType == "99.99"
+	return p.Kind == KindBar
 }
 
-// DefaultStockType returns the effective StockType, defaulting to StockTypeWeight for legacy products
-func (p *Product) DefaultStockType() StockType {
-	if p.StockType == "" {
-		return StockTypeWeight
-	}
-	return p.StockType
-}
-
-// ProductCategory represents a product category
-type ProductCategory struct {
-	ID          primitive.ObjectID `json:"id" bson:"_id,omitempty"`
-	Code        string             `json:"code" bson:"code"`
-	Name        string             `json:"name" bson:"name"`
-	Description string             `json:"description" bson:"description"`
-	IsActive    bool               `json:"is_active" bson:"is_active"`
-	CreatedAt   time.Time          `json:"created_at" bson:"created_at"`
-	UpdatedAt   time.Time          `json:"updated_at" bson:"updated_at"`
-}
-
-// Product represents a gold product
+// Product is the catalog entry. It holds no balance and no master-level price;
+// every sellable unit lives in a ProductItem.
+//
+//   - Kind determines required/optional fields:
+//   - ornament → Design (string), DefaultLaborCost
+//   - bar      → BarSizeBaht (float, free input)
+//   - GoldType is informational ("96.5%" / "99.99%").
 type Product struct {
-	ID           primitive.ObjectID `json:"id" bson:"_id,omitempty"`
-	BranchID     primitive.ObjectID `json:"branch_id" bson:"branch_id"`
-	CategoryID   primitive.ObjectID `json:"category_id" bson:"category_id"`
-	SKU          string             `json:"sku" bson:"sku"`
-	Barcode      string             `json:"barcode,omitempty" bson:"barcode,omitempty"`
-	Name         string             `json:"name" bson:"name"`
-	Description  string             `json:"description" bson:"description"`
-	StockType    StockType          `json:"stock_type" bson:"stock_type"`
-	GoldType     string             `json:"gold_type" bson:"gold_type"`     // 96.5%, 99.99%
-	Weight       float64            `json:"weight" bson:"weight"`           // grams
-	WeightUnit   string             `json:"weight_unit" bson:"weight_unit"` // baht, gram
-	LaborCost    float64            `json:"labor_cost" bson:"labor_cost"`   // ค่ากำเหน็จ
-	Price        float64            `json:"price" bson:"price"`
-	Cost         float64            `json:"cost" bson:"cost"`
-	Status       ProductStatus      `json:"status" bson:"status"`
-	Images       []string           `json:"images" bson:"images"`
-	ReorderPoint int                `json:"reorder_point" bson:"reorder_point"`
-	Items        []*ProductItem     `json:"items,omitempty" bson:"-"` // Not stored in product collection
-	CreatedAt    time.Time          `json:"created_at" bson:"created_at"`
-	UpdatedAt    time.Time          `json:"updated_at" bson:"updated_at"`
+	ID               primitive.ObjectID `json:"id" bson:"_id,omitempty"`
+	BranchID         primitive.ObjectID `json:"branch_id" bson:"branch_id"`
+	SKU              string             `json:"sku" bson:"sku"`
+	Code             string             `json:"code,omitempty" bson:"code,omitempty"`
+	Kind             ProductKind        `json:"kind" bson:"kind"`
+	GoldType         string             `json:"gold_type" bson:"gold_type"`
+	Name             string             `json:"name" bson:"name"`
+	Description      string             `json:"description,omitempty" bson:"description,omitempty"`
+	Design           string             `json:"design,omitempty" bson:"design,omitempty"`               // ornament-only
+	BarSizeBaht      *float64           `json:"bar_size_baht,omitempty" bson:"bar_size_baht,omitempty"` // bar-only
+	DefaultLaborCost float64            `json:"default_labor_cost" bson:"default_labor_cost"`           // ornament-only
+	Images           []string           `json:"images" bson:"images"`
+	IsActive         bool               `json:"is_active" bson:"is_active"`
+	Items            []*ProductItem     `json:"items,omitempty" bson:"-"` // populated at read time, not persisted on Product
+
+	CreatedAt time.Time `json:"created_at" bson:"created_at"`
+	UpdatedAt time.Time `json:"updated_at" bson:"updated_at"`
 }
 
-// NewProduct creates a new Product entity
-func NewProduct(branchID, categoryID primitive.ObjectID, sku, name, goldType string, stockType StockType, weight, laborCost float64) *Product {
+// NewOrnamentProduct creates an ornament catalog entry.
+func NewOrnamentProduct(branchID primitive.ObjectID, sku, name, design, goldType string, defaultLabor float64) *Product {
 	now := time.Now()
 	return &Product{
-		BranchID:   branchID,
-		CategoryID: categoryID,
-		SKU:        sku,
-		Name:       name,
-		StockType:  stockType,
-		GoldType:   goldType,
-		Weight:     weight,
-		WeightUnit: "gram",
-		LaborCost:  laborCost,
-		Status:     ProductStatusAvailable,
-		Images:     []string{},
-		CreatedAt:  now,
-		UpdatedAt:  now,
+		BranchID:         branchID,
+		SKU:              sku,
+		Kind:             KindOrnament,
+		GoldType:         goldType,
+		Name:             name,
+		Design:           design,
+		DefaultLaborCost: defaultLabor,
+		Images:           []string{},
+		IsActive:         true,
+		CreatedAt:        now,
+		UpdatedAt:        now,
 	}
 }
 
-// GetPrice returns the product price
-func (p *Product) GetPrice() float64 {
-	return p.Price
+// NewBarProduct creates a gold-bar catalog entry pinned to a baht size.
+// The pointer to BarSizeBaht is set so omitempty correctly distinguishes "missing".
+func NewBarProduct(branchID primitive.ObjectID, sku, name, goldType string, barSizeBaht float64) *Product {
+	now := time.Now()
+	size := barSizeBaht
+	return &Product{
+		BranchID:    branchID,
+		SKU:         sku,
+		Kind:        KindBar,
+		GoldType:    goldType,
+		Name:        name,
+		BarSizeBaht: &size,
+		Images:      []string{},
+		IsActive:    true,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}
 }
 
-// CalculateTotalPrice calculates total price including labor cost
-func (p *Product) CalculateTotalPrice() float64 {
-	return p.Price + p.LaborCost
+// DefaultItemWeightGrams returns the canonical weight for a freshly-created item:
+//   - bar: derived from BarSizeBaht × 15.244 (the operator may override per item)
+//   - ornament: 0 (operator must enter actual weight at item creation)
+func (p *Product) DefaultItemWeightGrams() float64 {
+	if p.Kind == KindBar && p.BarSizeBaht != nil {
+		return *p.BarSizeBaht * BahtPerGram
+	}
+	return 0
+}
+
+// DefaultItemLaborCost returns the labor seed for a new item:
+//   - ornament: DefaultLaborCost from the master
+//   - bar:      always 0
+func (p *Product) DefaultItemLaborCost() float64 {
+	if p.Kind == KindBar {
+		return 0
+	}
+	return p.DefaultLaborCost
 }
