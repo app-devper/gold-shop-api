@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/devper-gold/gold-shop-api/app/config"
-	"github.com/devper-gold/gold-shop-api/app/domain/entity"
 	"github.com/devper-gold/gold-shop-api/app/feature/branch"
 	"github.com/devper-gold/gold-shop-api/app/feature/customer"
 	"github.com/devper-gold/gold-shop-api/app/feature/employee"
@@ -45,8 +44,9 @@ func (a App) StartApp() {
 		gin.SetMode(gin.ReleaseMode)
 	}
 
-	// Connect to MongoDB
-	mongoClient, err := mongo.NewClient(cfg.MongoDB.URI, cfg.MongoDB.Database)
+	goldAPIClient := gold_price_infra.NewThaiGoldAPIClient(cfg.GoldAPI.URL)
+
+	mongoClient, err := mongo.NewClient(cfg.MongoDB.URI, cfg.MongoDB.DBPrefix, newTenantSeeder(goldAPIClient))
 	if err != nil {
 		logrus.Fatalf("Failed to connect to MongoDB: %v", err)
 	}
@@ -88,15 +88,6 @@ func (a App) StartApp() {
 	inventoryRepo := mongo.NewInventoryTransferRepository(mongoClient)
 	rewardRepo := mongo.NewRewardRepository(mongoClient)
 	redemptionRepo := mongo.NewRewardRedemptionRepository(mongoClient)
-
-	// Initialize external API clients
-	goldAPIClient := gold_price_infra.NewThaiGoldAPIClient(cfg.GoldAPI.URL)
-
-	// Seed default data
-	ctx := context.Background()
-	if err := initializeDefaultData(ctx, branchRepo, goldPriceRepo, goldAPIClient); err != nil {
-		logrus.Warnf("Failed to initialize default data: %v", err)
-	}
 
 	// Initialize services
 	employeeService := employee.NewService(employeeRepo, branchRepo)
@@ -157,53 +148,4 @@ func (a App) StartApp() {
 		logrus.Errorf("Server forced shutdown: %v", err)
 	}
 	logrus.Info("Server exited")
-}
-
-func initializeDefaultData(ctx context.Context, branchRepo interface {
-	GetByCode(ctx context.Context, code string) (*entity.Branch, error)
-	Create(ctx context.Context, branch *entity.Branch) error
-}, goldPriceRepo interface {
-	GetCurrent(ctx context.Context) (*entity.GoldPrice, error)
-	Create(ctx context.Context, price *entity.GoldPrice) error
-}, goldAPIClient gold_price_app.ExternalGoldPriceAPI) error {
-	_, err := branchRepo.GetByCode(ctx, "HQ")
-	if err == entity.ErrNotFound {
-		defaultBranch := entity.NewBranch("HQ", "สำนักงานใหญ่", "กรุงเทพมหานคร", "02-000-0000")
-		if err := branchRepo.Create(ctx, defaultBranch); err != nil {
-			return err
-		}
-		logrus.Info("Created default branch: HQ - สำนักงานใหญ่")
-	} else if err != nil {
-		return err
-	}
-
-	_, err = goldPriceRepo.GetCurrent(ctx)
-	if err == entity.ErrNotFound {
-		priceData, err := goldAPIClient.GetCurrentPrice(ctx)
-		if err != nil {
-			logrus.Warnf("Failed to fetch gold price from API: %v, using default values", err)
-			priceData = &gold_price_app.GoldPriceData{
-				GoldBarBuy:       42350.00,
-				GoldBarSell:      42450.00,
-				GoldOrnamentBuy:  41850.00,
-				GoldOrnamentSell: 42950.00,
-			}
-		}
-		goldPrice := entity.NewGoldPrice(
-			priceData.GoldBarBuy,
-			priceData.GoldBarSell,
-			priceData.GoldOrnamentBuy,
-			priceData.GoldOrnamentSell,
-			"api",
-		)
-		if err := goldPriceRepo.Create(ctx, goldPrice); err != nil {
-			return err
-		}
-		logrus.Infof("Created gold price from API: Bar(Buy:%.2f/Sell:%.2f) Ornament(Buy:%.2f/Sell:%.2f)",
-			priceData.GoldBarBuy, priceData.GoldBarSell, priceData.GoldOrnamentBuy, priceData.GoldOrnamentSell)
-	} else if err != nil {
-		return err
-	}
-
-	return nil
 }

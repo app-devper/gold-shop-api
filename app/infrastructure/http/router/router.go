@@ -40,10 +40,11 @@ func Setup(r *gin.Engine, secretKey string, sessionRepo middleware.SessionLookup
 	// API v1
 	api := r.Group("/api/v1")
 
-	// Protected routes: RequireAuthenticated → RequireSession → RequireBranch
+	// Protected routes: RequireAuthenticated → RequireTenant → RequireSession → RequireBranch
 	protected := api.Group("")
 	protected.Use(
 		middleware.RequireAuthenticated(secretKey),
+		middleware.RequireTenant(),
 		middleware.RequireSession(sessionRepo),
 		middleware.RequireBranch(employeeRepo, branchRepo),
 	)

@@ -13,27 +13,37 @@ import (
 )
 
 type rewardRepository struct {
-	collection *mongo.Collection
+	client *Client
 }
 
 func NewRewardRepository(client *Client) repository.RewardRepository {
-	return &rewardRepository{
-		collection: client.Collection("rewards"),
-	}
+	return &rewardRepository{client: client}
+}
+
+func (r *rewardRepository) coll(ctx context.Context) (*mongo.Collection, error) {
+	return r.client.CollectionFromCtx(ctx, CollectionRewards)
 }
 
 func (r *rewardRepository) Create(ctx context.Context, reward *entity.Reward) error {
+	coll, err := r.coll(ctx)
+	if err != nil {
+		return err
+	}
 	reward.ID = primitive.NewObjectID()
 	reward.CreatedAt = time.Now()
 	reward.UpdatedAt = time.Now()
 
-	_, err := r.collection.InsertOne(ctx, reward)
+	_, err = coll.InsertOne(ctx, reward)
 	return err
 }
 
 func (r *rewardRepository) GetByID(ctx context.Context, id primitive.ObjectID) (*entity.Reward, error) {
+	coll, err := r.coll(ctx)
+	if err != nil {
+		return nil, err
+	}
 	var reward entity.Reward
-	err := r.collection.FindOne(ctx, bson.M{"_id": id}).Decode(&reward)
+	err = coll.FindOne(ctx, bson.M{"_id": id}).Decode(&reward)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
 			return nil, nil
@@ -44,13 +54,17 @@ func (r *rewardRepository) GetByID(ctx context.Context, id primitive.ObjectID) (
 }
 
 func (r *rewardRepository) GetAll(ctx context.Context, activeOnly bool) ([]*entity.Reward, error) {
+	coll, err := r.coll(ctx)
+	if err != nil {
+		return nil, err
+	}
 	filter := bson.M{}
 	if activeOnly {
 		filter["is_active"] = true
 	}
 
 	opts := options.Find().SetSort(bson.M{"point_cost": 1})
-	cursor, err := r.collection.Find(ctx, filter, opts)
+	cursor, err := coll.Find(ctx, filter, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -64,8 +78,12 @@ func (r *rewardRepository) GetAll(ctx context.Context, activeOnly bool) ([]*enti
 }
 
 func (r *rewardRepository) Update(ctx context.Context, reward *entity.Reward) error {
+	coll, err := r.coll(ctx)
+	if err != nil {
+		return err
+	}
 	reward.UpdatedAt = time.Now()
-	_, err := r.collection.UpdateOne(
+	_, err = coll.UpdateOne(
 		ctx,
 		bson.M{"_id": reward.ID},
 		bson.M{"$set": reward},
@@ -74,34 +92,48 @@ func (r *rewardRepository) Update(ctx context.Context, reward *entity.Reward) er
 }
 
 func (r *rewardRepository) Delete(ctx context.Context, id primitive.ObjectID) error {
-	_, err := r.collection.DeleteOne(ctx, bson.M{"_id": id})
+	coll, err := r.coll(ctx)
+	if err != nil {
+		return err
+	}
+	_, err = coll.DeleteOne(ctx, bson.M{"_id": id})
 	return err
 }
 
 // RewardRedemptionRepository implementation
 type rewardRedemptionRepository struct {
-	collection *mongo.Collection
+	client *Client
 }
 
 func NewRewardRedemptionRepository(client *Client) repository.RewardRedemptionRepository {
-	return &rewardRedemptionRepository{
-		collection: client.Collection("reward_redemptions"),
-	}
+	return &rewardRedemptionRepository{client: client}
+}
+
+func (r *rewardRedemptionRepository) coll(ctx context.Context) (*mongo.Collection, error) {
+	return r.client.CollectionFromCtx(ctx, CollectionRewardRedemptions)
 }
 
 func (r *rewardRedemptionRepository) Create(ctx context.Context, redemption *entity.RewardRedemption) error {
+	coll, err := r.coll(ctx)
+	if err != nil {
+		return err
+	}
 	redemption.ID = primitive.NewObjectID()
 	redemption.RedeemedAt = time.Now()
 
-	_, err := r.collection.InsertOne(ctx, redemption)
+	_, err = coll.InsertOne(ctx, redemption)
 	return err
 }
 
 func (r *rewardRedemptionRepository) GetByCustomerID(ctx context.Context, customerID primitive.ObjectID) ([]*entity.RewardRedemption, error) {
+	coll, err := r.coll(ctx)
+	if err != nil {
+		return nil, err
+	}
 	filter := bson.M{"customer_id": customerID}
 	opts := options.Find().SetSort(bson.M{"redeemed_at": -1}) // Newest first
 
-	cursor, err := r.collection.Find(ctx, filter, opts)
+	cursor, err := coll.Find(ctx, filter, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -115,13 +147,17 @@ func (r *rewardRedemptionRepository) GetByCustomerID(ctx context.Context, custom
 }
 
 func (r *rewardRedemptionRepository) GetByBranchID(ctx context.Context, branchID primitive.ObjectID, limit, offset int) ([]*entity.RewardRedemption, error) {
+	coll, err := r.coll(ctx)
+	if err != nil {
+		return nil, err
+	}
 	filter := bson.M{"branch_id": branchID}
 	opts := options.Find().
 		SetSort(bson.M{"redeemed_at": -1}).
 		SetSkip(int64(offset)).
 		SetLimit(int64(limit))
 
-	cursor, err := r.collection.Find(ctx, filter, opts)
+	cursor, err := coll.Find(ctx, filter, opts)
 	if err != nil {
 		return nil, err
 	}

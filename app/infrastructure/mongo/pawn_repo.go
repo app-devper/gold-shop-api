@@ -14,24 +14,32 @@ import (
 
 // PawnRepository implements repository.PawnRepository
 type PawnRepository struct {
-	collection *mongo.Collection
-	counter    *CounterRepository
+	client  *Client
+	counter *CounterRepository
 }
 
 // NewPawnRepository creates a new PawnRepository
 func NewPawnRepository(client *Client) *PawnRepository {
 	return &PawnRepository{
-		collection: client.Collection(CollectionPawns),
-		counter:    NewCounterRepository(client),
+		client:  client,
+		counter: NewCounterRepository(client),
 	}
+}
+
+func (r *PawnRepository) coll(ctx context.Context) (*mongo.Collection, error) {
+	return r.client.CollectionFromCtx(ctx, CollectionPawns)
 }
 
 // Create creates a new pawn
 func (r *PawnRepository) Create(ctx context.Context, pawn *entity.Pawn) error {
+	coll, err := r.coll(ctx)
+	if err != nil {
+		return err
+	}
 	pawn.CreatedAt = time.Now()
 	pawn.UpdatedAt = time.Now()
 
-	result, err := r.collection.InsertOne(ctx, pawn)
+	result, err := coll.InsertOne(ctx, pawn)
 	if err != nil {
 		if mongo.IsDuplicateKeyError(err) {
 			return entity.ErrDuplicateKey
@@ -45,8 +53,12 @@ func (r *PawnRepository) Create(ctx context.Context, pawn *entity.Pawn) error {
 
 // GetByID retrieves a pawn by ID
 func (r *PawnRepository) GetByID(ctx context.Context, id primitive.ObjectID) (*entity.Pawn, error) {
+	coll, err := r.coll(ctx)
+	if err != nil {
+		return nil, err
+	}
 	var pawn entity.Pawn
-	err := r.collection.FindOne(ctx, bson.M{"_id": id}).Decode(&pawn)
+	err = coll.FindOne(ctx, bson.M{"_id": id}).Decode(&pawn)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
 			return nil, entity.ErrNotFound
@@ -58,8 +70,12 @@ func (r *PawnRepository) GetByID(ctx context.Context, id primitive.ObjectID) (*e
 
 // GetByPawnNumber retrieves a pawn by pawn number
 func (r *PawnRepository) GetByPawnNumber(ctx context.Context, pawnNumber string) (*entity.Pawn, error) {
+	coll, err := r.coll(ctx)
+	if err != nil {
+		return nil, err
+	}
 	var pawn entity.Pawn
-	err := r.collection.FindOne(ctx, bson.M{"pawn_number": pawnNumber}).Decode(&pawn)
+	err = coll.FindOne(ctx, bson.M{"pawn_number": pawnNumber}).Decode(&pawn)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
 			return nil, entity.ErrNotFound
@@ -71,6 +87,10 @@ func (r *PawnRepository) GetByPawnNumber(ctx context.Context, pawnNumber string)
 
 // GetByBranchID retrieves pawns by branch ID
 func (r *PawnRepository) GetByBranchID(ctx context.Context, branchID primitive.ObjectID, status []entity.PawnStatus, limit, offset int) ([]*entity.Pawn, error) {
+	coll, err := r.coll(ctx)
+	if err != nil {
+		return nil, err
+	}
 	filter := bson.M{"branch_id": branchID}
 	if len(status) > 0 {
 		filter["status"] = bson.M{"$in": status}
@@ -81,7 +101,7 @@ func (r *PawnRepository) GetByBranchID(ctx context.Context, branchID primitive.O
 		SetSkip(int64(offset)).
 		SetSort(bson.D{{Key: "created_at", Value: -1}})
 
-	cursor, err := r.collection.Find(ctx, filter, opts)
+	cursor, err := coll.Find(ctx, filter, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -96,7 +116,11 @@ func (r *PawnRepository) GetByBranchID(ctx context.Context, branchID primitive.O
 
 // GetByCustomerID retrieves pawns by customer ID
 func (r *PawnRepository) GetByCustomerID(ctx context.Context, customerID primitive.ObjectID) ([]*entity.Pawn, error) {
-	cursor, err := r.collection.Find(ctx, bson.M{"customer_id": customerID})
+	coll, err := r.coll(ctx)
+	if err != nil {
+		return nil, err
+	}
+	cursor, err := coll.Find(ctx, bson.M{"customer_id": customerID})
 	if err != nil {
 		return nil, err
 	}
@@ -111,6 +135,10 @@ func (r *PawnRepository) GetByCustomerID(ctx context.Context, customerID primiti
 
 // GetDueSoon retrieves pawns due within specified days
 func (r *PawnRepository) GetDueSoon(ctx context.Context, branchID primitive.ObjectID, days int) ([]*entity.Pawn, error) {
+	coll, err := r.coll(ctx)
+	if err != nil {
+		return nil, err
+	}
 	now := time.Now()
 	dueDate := now.AddDate(0, 0, days)
 
@@ -123,7 +151,7 @@ func (r *PawnRepository) GetDueSoon(ctx context.Context, branchID primitive.Obje
 		},
 	}
 
-	cursor, err := r.collection.Find(ctx, filter)
+	cursor, err := coll.Find(ctx, filter)
 	if err != nil {
 		return nil, err
 	}
@@ -138,13 +166,17 @@ func (r *PawnRepository) GetDueSoon(ctx context.Context, branchID primitive.Obje
 
 // GetOverdue retrieves overdue pawns
 func (r *PawnRepository) GetOverdue(ctx context.Context, branchID primitive.ObjectID) ([]*entity.Pawn, error) {
+	coll, err := r.coll(ctx)
+	if err != nil {
+		return nil, err
+	}
 	filter := bson.M{
 		"branch_id": branchID,
 		"status":    entity.PawnStatusActive,
 		"due_date":  bson.M{"$lt": time.Now()},
 	}
 
-	cursor, err := r.collection.Find(ctx, filter)
+	cursor, err := coll.Find(ctx, filter)
 	if err != nil {
 		return nil, err
 	}
@@ -159,9 +191,13 @@ func (r *PawnRepository) GetOverdue(ctx context.Context, branchID primitive.Obje
 
 // Update updates a pawn
 func (r *PawnRepository) Update(ctx context.Context, pawn *entity.Pawn) error {
+	coll, err := r.coll(ctx)
+	if err != nil {
+		return err
+	}
 	pawn.UpdatedAt = time.Now()
 
-	result, err := r.collection.ReplaceOne(ctx, bson.M{"_id": pawn.ID}, pawn)
+	result, err := coll.ReplaceOne(ctx, bson.M{"_id": pawn.ID}, pawn)
 	if err != nil {
 		return err
 	}
@@ -186,15 +222,23 @@ func (r *PawnRepository) GeneratePawnNumber(ctx context.Context, branchCode stri
 
 // CountByStatus counts pawns by status
 func (r *PawnRepository) CountByStatus(ctx context.Context, branchID primitive.ObjectID, status entity.PawnStatus) (int64, error) {
+	coll, err := r.coll(ctx)
+	if err != nil {
+		return 0, err
+	}
 	filter := bson.M{
 		"branch_id": branchID,
 		"status":    status,
 	}
-	return r.collection.CountDocuments(ctx, filter)
+	return coll.CountDocuments(ctx, filter)
 }
 
 // SumInterestByBranchAndDateRange calculates total interest collected
 func (r *PawnRepository) SumInterestByBranchAndDateRange(ctx context.Context, branchID primitive.ObjectID, from, to string) (float64, error) {
+	coll, err := r.coll(ctx)
+	if err != nil {
+		return 0, err
+	}
 	fromTime, toTime, err := parseDateRange(from, to)
 	if err != nil {
 		return 0, err
@@ -227,7 +271,7 @@ func (r *PawnRepository) SumInterestByBranchAndDateRange(ctx context.Context, br
 
 	var total float64
 
-	cursorR, err := r.collection.Aggregate(ctx, redemptionPipeline)
+	cursorR, err := coll.Aggregate(ctx, redemptionPipeline)
 	if err != nil {
 		return 0, fmt.Errorf("failed to aggregate redemption interest: %w", err)
 	}
@@ -243,7 +287,7 @@ func (r *PawnRepository) SumInterestByBranchAndDateRange(ctx context.Context, br
 		total += resR[0].Total
 	}
 
-	cursorP, err := r.collection.Aggregate(ctx, paymentsPipeline)
+	cursorP, err := coll.Aggregate(ctx, paymentsPipeline)
 	if err != nil {
 		return 0, fmt.Errorf("failed to aggregate interest payments: %w", err)
 	}

@@ -12,22 +12,28 @@ import (
 
 // UserRepository implements repository.UserRepository
 type UserRepository struct {
-	collection *mongo.Collection
+	client *Client
 }
 
 // NewUserRepository creates a new UserRepository
 func NewUserRepository(client *Client) *UserRepository {
-	return &UserRepository{
-		collection: client.Collection(CollectionUsers),
-	}
+	return &UserRepository{client: client}
+}
+
+func (r *UserRepository) coll(ctx context.Context) (*mongo.Collection, error) {
+	return r.client.CollectionFromCtx(ctx, CollectionUsers)
 }
 
 // Create creates a new user
 func (r *UserRepository) Create(ctx context.Context, user *entity.User) error {
+	coll, err := r.coll(ctx)
+	if err != nil {
+		return err
+	}
 	user.CreatedAt = time.Now()
 	user.UpdatedAt = time.Now()
 
-	result, err := r.collection.InsertOne(ctx, user)
+	result, err := coll.InsertOne(ctx, user)
 	if err != nil {
 		if mongo.IsDuplicateKeyError(err) {
 			return entity.ErrDuplicateKey
@@ -41,8 +47,12 @@ func (r *UserRepository) Create(ctx context.Context, user *entity.User) error {
 
 // GetByID retrieves a user by ID
 func (r *UserRepository) GetByID(ctx context.Context, id primitive.ObjectID) (*entity.User, error) {
+	coll, err := r.coll(ctx)
+	if err != nil {
+		return nil, err
+	}
 	var user entity.User
-	err := r.collection.FindOne(ctx, bson.M{"_id": id}).Decode(&user)
+	err = coll.FindOne(ctx, bson.M{"_id": id}).Decode(&user)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
 			return nil, entity.ErrNotFound
@@ -54,8 +64,12 @@ func (r *UserRepository) GetByID(ctx context.Context, id primitive.ObjectID) (*e
 
 // GetByUsername retrieves a user by username
 func (r *UserRepository) GetByUsername(ctx context.Context, username string) (*entity.User, error) {
+	coll, err := r.coll(ctx)
+	if err != nil {
+		return nil, err
+	}
 	var user entity.User
-	err := r.collection.FindOne(ctx, bson.M{"username": username}).Decode(&user)
+	err = coll.FindOne(ctx, bson.M{"username": username}).Decode(&user)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
 			return nil, entity.ErrNotFound
@@ -67,7 +81,11 @@ func (r *UserRepository) GetByUsername(ctx context.Context, username string) (*e
 
 // GetByBranchID retrieves users by branch ID
 func (r *UserRepository) GetByBranchID(ctx context.Context, branchID primitive.ObjectID) ([]*entity.User, error) {
-	cursor, err := r.collection.Find(ctx, bson.M{"branch_id": branchID})
+	coll, err := r.coll(ctx)
+	if err != nil {
+		return nil, err
+	}
+	cursor, err := coll.Find(ctx, bson.M{"branch_id": branchID})
 	if err != nil {
 		return nil, err
 	}
@@ -82,7 +100,11 @@ func (r *UserRepository) GetByBranchID(ctx context.Context, branchID primitive.O
 
 // GetAll retrieves all users
 func (r *UserRepository) GetAll(ctx context.Context) ([]*entity.User, error) {
-	cursor, err := r.collection.Find(ctx, bson.M{})
+	coll, err := r.coll(ctx)
+	if err != nil {
+		return nil, err
+	}
+	cursor, err := coll.Find(ctx, bson.M{})
 	if err != nil {
 		return nil, err
 	}
@@ -97,9 +119,13 @@ func (r *UserRepository) GetAll(ctx context.Context) ([]*entity.User, error) {
 
 // Update updates a user
 func (r *UserRepository) Update(ctx context.Context, user *entity.User) error {
+	coll, err := r.coll(ctx)
+	if err != nil {
+		return err
+	}
 	user.UpdatedAt = time.Now()
 
-	result, err := r.collection.ReplaceOne(ctx, bson.M{"_id": user.ID}, user)
+	result, err := coll.ReplaceOne(ctx, bson.M{"_id": user.ID}, user)
 	if err != nil {
 		return err
 	}
@@ -111,7 +137,11 @@ func (r *UserRepository) Update(ctx context.Context, user *entity.User) error {
 
 // Delete deletes a user
 func (r *UserRepository) Delete(ctx context.Context, id primitive.ObjectID) error {
-	result, err := r.collection.DeleteOne(ctx, bson.M{"_id": id})
+	coll, err := r.coll(ctx)
+	if err != nil {
+		return err
+	}
+	result, err := coll.DeleteOne(ctx, bson.M{"_id": id})
 	if err != nil {
 		return err
 	}

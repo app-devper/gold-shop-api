@@ -13,22 +13,28 @@ import (
 
 // CustomerRepository implements repository.CustomerRepository
 type CustomerRepository struct {
-	collection *mongo.Collection
+	client *Client
 }
 
 // NewCustomerRepository creates a new CustomerRepository
 func NewCustomerRepository(client *Client) *CustomerRepository {
-	return &CustomerRepository{
-		collection: client.Collection(CollectionCustomers),
-	}
+	return &CustomerRepository{client: client}
+}
+
+func (r *CustomerRepository) coll(ctx context.Context) (*mongo.Collection, error) {
+	return r.client.CollectionFromCtx(ctx, CollectionCustomers)
 }
 
 // Create creates a new customer
 func (r *CustomerRepository) Create(ctx context.Context, customer *entity.Customer) error {
+	coll, err := r.coll(ctx)
+	if err != nil {
+		return err
+	}
 	customer.CreatedAt = time.Now()
 	customer.UpdatedAt = time.Now()
 
-	result, err := r.collection.InsertOne(ctx, customer)
+	result, err := coll.InsertOne(ctx, customer)
 	if err != nil {
 		if mongo.IsDuplicateKeyError(err) {
 			return entity.ErrDuplicateKey
@@ -42,8 +48,12 @@ func (r *CustomerRepository) Create(ctx context.Context, customer *entity.Custom
 
 // GetByID retrieves a customer by ID
 func (r *CustomerRepository) GetByID(ctx context.Context, id primitive.ObjectID) (*entity.Customer, error) {
+	coll, err := r.coll(ctx)
+	if err != nil {
+		return nil, err
+	}
 	var customer entity.Customer
-	err := r.collection.FindOne(ctx, bson.M{"_id": id}).Decode(&customer)
+	err = coll.FindOne(ctx, bson.M{"_id": id}).Decode(&customer)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
 			return nil, entity.ErrNotFound
@@ -55,8 +65,12 @@ func (r *CustomerRepository) GetByID(ctx context.Context, id primitive.ObjectID)
 
 // GetByMemberCode retrieves a customer by member code
 func (r *CustomerRepository) GetByMemberCode(ctx context.Context, memberCode string) (*entity.Customer, error) {
+	coll, err := r.coll(ctx)
+	if err != nil {
+		return nil, err
+	}
 	var customer entity.Customer
-	err := r.collection.FindOne(ctx, bson.M{"member_code": memberCode}).Decode(&customer)
+	err = coll.FindOne(ctx, bson.M{"member_code": memberCode}).Decode(&customer)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
 			return nil, entity.ErrNotFound
@@ -68,8 +82,12 @@ func (r *CustomerRepository) GetByMemberCode(ctx context.Context, memberCode str
 
 // GetByRFID retrieves a customer by RFID card
 func (r *CustomerRepository) GetByRFID(ctx context.Context, rfidCard string) (*entity.Customer, error) {
+	coll, err := r.coll(ctx)
+	if err != nil {
+		return nil, err
+	}
 	var customer entity.Customer
-	err := r.collection.FindOne(ctx, bson.M{"rfid_card": rfidCard}).Decode(&customer)
+	err = coll.FindOne(ctx, bson.M{"rfid_card": rfidCard}).Decode(&customer)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
 			return nil, entity.ErrNotFound
@@ -81,8 +99,12 @@ func (r *CustomerRepository) GetByRFID(ctx context.Context, rfidCard string) (*e
 
 // GetByPhone retrieves a customer by phone number
 func (r *CustomerRepository) GetByPhone(ctx context.Context, phone string) (*entity.Customer, error) {
+	coll, err := r.coll(ctx)
+	if err != nil {
+		return nil, err
+	}
 	var customer entity.Customer
-	err := r.collection.FindOne(ctx, bson.M{"phone": phone}).Decode(&customer)
+	err = coll.FindOne(ctx, bson.M{"phone": phone}).Decode(&customer)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
 			return nil, entity.ErrNotFound
@@ -94,12 +116,16 @@ func (r *CustomerRepository) GetByPhone(ctx context.Context, phone string) (*ent
 
 // GetAll retrieves all customers with pagination
 func (r *CustomerRepository) GetAll(ctx context.Context, limit, offset int) ([]*entity.Customer, error) {
+	coll, err := r.coll(ctx)
+	if err != nil {
+		return nil, err
+	}
 	opts := options.Find().
 		SetLimit(int64(limit)).
 		SetSkip(int64(offset)).
 		SetSort(bson.D{{Key: "created_at", Value: -1}})
 
-	cursor, err := r.collection.Find(ctx, bson.M{}, opts)
+	cursor, err := coll.Find(ctx, bson.M{}, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -114,6 +140,10 @@ func (r *CustomerRepository) GetAll(ctx context.Context, limit, offset int) ([]*
 
 // Search searches customers by name or phone
 func (r *CustomerRepository) Search(ctx context.Context, query string, limit int) ([]*entity.Customer, error) {
+	coll, err := r.coll(ctx)
+	if err != nil {
+		return nil, err
+	}
 	filter := bson.M{
 		"$or": []bson.M{
 			{"full_name": bson.M{"$regex": query, "$options": "i"}},
@@ -123,7 +153,7 @@ func (r *CustomerRepository) Search(ctx context.Context, query string, limit int
 	}
 
 	opts := options.Find().SetLimit(int64(limit))
-	cursor, err := r.collection.Find(ctx, filter, opts)
+	cursor, err := coll.Find(ctx, filter, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -138,9 +168,13 @@ func (r *CustomerRepository) Search(ctx context.Context, query string, limit int
 
 // Update updates a customer
 func (r *CustomerRepository) Update(ctx context.Context, customer *entity.Customer) error {
+	coll, err := r.coll(ctx)
+	if err != nil {
+		return err
+	}
 	customer.UpdatedAt = time.Now()
 
-	result, err := r.collection.ReplaceOne(ctx, bson.M{"_id": customer.ID}, customer)
+	result, err := coll.ReplaceOne(ctx, bson.M{"_id": customer.ID}, customer)
 	if err != nil {
 		return err
 	}
@@ -152,7 +186,11 @@ func (r *CustomerRepository) Update(ctx context.Context, customer *entity.Custom
 
 // Delete deletes a customer
 func (r *CustomerRepository) Delete(ctx context.Context, id primitive.ObjectID) error {
-	result, err := r.collection.DeleteOne(ctx, bson.M{"_id": id})
+	coll, err := r.coll(ctx)
+	if err != nil {
+		return err
+	}
+	result, err := coll.DeleteOne(ctx, bson.M{"_id": id})
 	if err != nil {
 		return err
 	}
@@ -164,5 +202,9 @@ func (r *CustomerRepository) Delete(ctx context.Context, id primitive.ObjectID) 
 
 // Count returns total customer count
 func (r *CustomerRepository) Count(ctx context.Context) (int64, error) {
-	return r.collection.CountDocuments(ctx, bson.M{})
+	coll, err := r.coll(ctx)
+	if err != nil {
+		return 0, err
+	}
+	return coll.CountDocuments(ctx, bson.M{})
 }

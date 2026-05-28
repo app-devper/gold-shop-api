@@ -12,22 +12,28 @@ import (
 
 // BranchRepository implements repository.BranchRepository
 type BranchRepository struct {
-	collection *mongo.Collection
+	client *Client
 }
 
 // NewBranchRepository creates a new BranchRepository
 func NewBranchRepository(client *Client) *BranchRepository {
-	return &BranchRepository{
-		collection: client.Collection(CollectionBranches),
-	}
+	return &BranchRepository{client: client}
+}
+
+func (r *BranchRepository) coll(ctx context.Context) (*mongo.Collection, error) {
+	return r.client.CollectionFromCtx(ctx, CollectionBranches)
 }
 
 // Create creates a new branch
 func (r *BranchRepository) Create(ctx context.Context, branch *entity.Branch) error {
+	coll, err := r.coll(ctx)
+	if err != nil {
+		return err
+	}
 	branch.CreatedAt = time.Now()
 	branch.UpdatedAt = time.Now()
 
-	result, err := r.collection.InsertOne(ctx, branch)
+	result, err := coll.InsertOne(ctx, branch)
 	if err != nil {
 		if mongo.IsDuplicateKeyError(err) {
 			return entity.ErrDuplicateKey
@@ -41,8 +47,12 @@ func (r *BranchRepository) Create(ctx context.Context, branch *entity.Branch) er
 
 // GetByID retrieves a branch by ID
 func (r *BranchRepository) GetByID(ctx context.Context, id primitive.ObjectID) (*entity.Branch, error) {
+	coll, err := r.coll(ctx)
+	if err != nil {
+		return nil, err
+	}
 	var branch entity.Branch
-	err := r.collection.FindOne(ctx, bson.M{"_id": id}).Decode(&branch)
+	err = coll.FindOne(ctx, bson.M{"_id": id}).Decode(&branch)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
 			return nil, entity.ErrNotFound
@@ -54,8 +64,12 @@ func (r *BranchRepository) GetByID(ctx context.Context, id primitive.ObjectID) (
 
 // GetByCode retrieves a branch by code
 func (r *BranchRepository) GetByCode(ctx context.Context, code string) (*entity.Branch, error) {
+	coll, err := r.coll(ctx)
+	if err != nil {
+		return nil, err
+	}
 	var branch entity.Branch
-	err := r.collection.FindOne(ctx, bson.M{"code": code}).Decode(&branch)
+	err = coll.FindOne(ctx, bson.M{"code": code}).Decode(&branch)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
 			return nil, entity.ErrNotFound
@@ -67,7 +81,11 @@ func (r *BranchRepository) GetByCode(ctx context.Context, code string) (*entity.
 
 // GetAll retrieves all branches
 func (r *BranchRepository) GetAll(ctx context.Context) ([]*entity.Branch, error) {
-	cursor, err := r.collection.Find(ctx, bson.M{})
+	coll, err := r.coll(ctx)
+	if err != nil {
+		return nil, err
+	}
+	cursor, err := coll.Find(ctx, bson.M{})
 	if err != nil {
 		return nil, err
 	}
@@ -82,9 +100,13 @@ func (r *BranchRepository) GetAll(ctx context.Context) ([]*entity.Branch, error)
 
 // Update updates a branch
 func (r *BranchRepository) Update(ctx context.Context, branch *entity.Branch) error {
+	coll, err := r.coll(ctx)
+	if err != nil {
+		return err
+	}
 	branch.UpdatedAt = time.Now()
 
-	result, err := r.collection.ReplaceOne(ctx, bson.M{"_id": branch.ID}, branch)
+	result, err := coll.ReplaceOne(ctx, bson.M{"_id": branch.ID}, branch)
 	if err != nil {
 		return err
 	}
@@ -96,7 +118,11 @@ func (r *BranchRepository) Update(ctx context.Context, branch *entity.Branch) er
 
 // Delete deletes a branch
 func (r *BranchRepository) Delete(ctx context.Context, id primitive.ObjectID) error {
-	result, err := r.collection.DeleteOne(ctx, bson.M{"_id": id})
+	coll, err := r.coll(ctx)
+	if err != nil {
+		return err
+	}
+	result, err := coll.DeleteOne(ctx, bson.M{"_id": id})
 	if err != nil {
 		return err
 	}

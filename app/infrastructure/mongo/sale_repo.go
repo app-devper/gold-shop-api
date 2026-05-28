@@ -31,24 +31,32 @@ func parseDateRange(from, to string) (time.Time, time.Time, error) {
 
 // SaleRepository implements repository.SaleRepository
 type SaleRepository struct {
-	collection *mongo.Collection
-	counter    *CounterRepository
+	client  *Client
+	counter *CounterRepository
 }
 
 // NewSaleRepository creates a new SaleRepository
 func NewSaleRepository(client *Client) *SaleRepository {
 	return &SaleRepository{
-		collection: client.Collection(CollectionSales),
-		counter:    NewCounterRepository(client),
+		client:  client,
+		counter: NewCounterRepository(client),
 	}
+}
+
+func (r *SaleRepository) coll(ctx context.Context) (*mongo.Collection, error) {
+	return r.client.CollectionFromCtx(ctx, CollectionSales)
 }
 
 // Create creates a new sale
 func (r *SaleRepository) Create(ctx context.Context, sale *entity.Sale) error {
+	coll, err := r.coll(ctx)
+	if err != nil {
+		return err
+	}
 	sale.CreatedAt = time.Now()
 	sale.UpdatedAt = time.Now()
 
-	result, err := r.collection.InsertOne(ctx, sale)
+	result, err := coll.InsertOne(ctx, sale)
 	if err != nil {
 		if mongo.IsDuplicateKeyError(err) {
 			return entity.ErrDuplicateKey
@@ -62,8 +70,12 @@ func (r *SaleRepository) Create(ctx context.Context, sale *entity.Sale) error {
 
 // GetByID retrieves a sale by ID
 func (r *SaleRepository) GetByID(ctx context.Context, id primitive.ObjectID) (*entity.Sale, error) {
+	coll, err := r.coll(ctx)
+	if err != nil {
+		return nil, err
+	}
 	var sale entity.Sale
-	err := r.collection.FindOne(ctx, bson.M{"_id": id}).Decode(&sale)
+	err = coll.FindOne(ctx, bson.M{"_id": id}).Decode(&sale)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
 			return nil, entity.ErrNotFound
@@ -75,8 +87,12 @@ func (r *SaleRepository) GetByID(ctx context.Context, id primitive.ObjectID) (*e
 
 // GetBySaleNumber retrieves a sale by sale number
 func (r *SaleRepository) GetBySaleNumber(ctx context.Context, saleNumber string) (*entity.Sale, error) {
+	coll, err := r.coll(ctx)
+	if err != nil {
+		return nil, err
+	}
 	var sale entity.Sale
-	err := r.collection.FindOne(ctx, bson.M{"sale_number": saleNumber}).Decode(&sale)
+	err = coll.FindOne(ctx, bson.M{"sale_number": saleNumber}).Decode(&sale)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
 			return nil, entity.ErrNotFound
@@ -88,6 +104,10 @@ func (r *SaleRepository) GetBySaleNumber(ctx context.Context, saleNumber string)
 
 // GetByBranchID retrieves sales by branch ID with filters
 func (r *SaleRepository) GetByBranchID(ctx context.Context, branchID primitive.ObjectID, status []entity.SaleStatus, limit, offset int) ([]*entity.Sale, error) {
+	coll, err := r.coll(ctx)
+	if err != nil {
+		return nil, err
+	}
 	filter := bson.M{"branch_id": branchID}
 	if len(status) > 0 {
 		filter["status"] = bson.M{"$in": status}
@@ -98,7 +118,7 @@ func (r *SaleRepository) GetByBranchID(ctx context.Context, branchID primitive.O
 		SetSkip(int64(offset)).
 		SetSort(bson.D{{Key: "created_at", Value: -1}})
 
-	cursor, err := r.collection.Find(ctx, filter, opts)
+	cursor, err := coll.Find(ctx, filter, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -113,11 +133,15 @@ func (r *SaleRepository) GetByBranchID(ctx context.Context, branchID primitive.O
 
 // GetByCustomerID retrieves sales by customer ID
 func (r *SaleRepository) GetByCustomerID(ctx context.Context, customerID primitive.ObjectID, limit int) ([]*entity.Sale, error) {
+	coll, err := r.coll(ctx)
+	if err != nil {
+		return nil, err
+	}
 	opts := options.Find().
 		SetLimit(int64(limit)).
 		SetSort(bson.D{{Key: "created_at", Value: -1}})
 
-	cursor, err := r.collection.Find(ctx, bson.M{"customer_id": customerID}, opts)
+	cursor, err := coll.Find(ctx, bson.M{"customer_id": customerID}, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -132,6 +156,10 @@ func (r *SaleRepository) GetByCustomerID(ctx context.Context, customerID primiti
 
 // GetByDateRange retrieves sales by date range
 func (r *SaleRepository) GetByDateRange(ctx context.Context, branchID primitive.ObjectID, from, to string) ([]*entity.Sale, error) {
+	coll, err := r.coll(ctx)
+	if err != nil {
+		return nil, err
+	}
 	fromTime, toTime, err := parseDateRange(from, to)
 	if err != nil {
 		return nil, err
@@ -145,7 +173,7 @@ func (r *SaleRepository) GetByDateRange(ctx context.Context, branchID primitive.
 		},
 	}
 
-	cursor, err := r.collection.Find(ctx, filter)
+	cursor, err := coll.Find(ctx, filter)
 	if err != nil {
 		return nil, err
 	}
@@ -160,9 +188,13 @@ func (r *SaleRepository) GetByDateRange(ctx context.Context, branchID primitive.
 
 // Update updates a sale
 func (r *SaleRepository) Update(ctx context.Context, sale *entity.Sale) error {
+	coll, err := r.coll(ctx)
+	if err != nil {
+		return err
+	}
 	sale.UpdatedAt = time.Now()
 
-	result, err := r.collection.ReplaceOne(ctx, bson.M{"_id": sale.ID}, sale)
+	result, err := coll.ReplaceOne(ctx, bson.M{"_id": sale.ID}, sale)
 	if err != nil {
 		return err
 	}
@@ -210,6 +242,10 @@ func saleNumberPrefix(t entity.SaleType) string {
 
 // SumByBranchAndDateRange calculates total net sales for a branch and date range
 func (r *SaleRepository) SumByBranchAndDateRange(ctx context.Context, branchID primitive.ObjectID, from, to string) (float64, error) {
+	coll, err := r.coll(ctx)
+	if err != nil {
+		return 0, err
+	}
 	fromTime, toTime, err := parseDateRange(from, to)
 	if err != nil {
 		return 0, err
@@ -227,7 +263,7 @@ func (r *SaleRepository) SumByBranchAndDateRange(ctx context.Context, branchID p
 		}}},
 	}
 
-	cursor, err := r.collection.Aggregate(ctx, pipeline)
+	cursor, err := coll.Aggregate(ctx, pipeline)
 	if err != nil {
 		return 0, err
 	}
@@ -248,6 +284,10 @@ func (r *SaleRepository) SumByBranchAndDateRange(ctx context.Context, branchID p
 
 // CountByBranchAndDateRange counts sales for a branch and date range
 func (r *SaleRepository) CountByBranchAndDateRange(ctx context.Context, branchID primitive.ObjectID, from, to string) (int64, error) {
+	coll, err := r.coll(ctx)
+	if err != nil {
+		return 0, err
+	}
 	fromTime, toTime, err := parseDateRange(from, to)
 	if err != nil {
 		return 0, err
@@ -259,11 +299,15 @@ func (r *SaleRepository) CountByBranchAndDateRange(ctx context.Context, branchID
 		"status":     entity.SaleStatusCompleted,
 	}
 
-	return r.collection.CountDocuments(ctx, filter)
+	return coll.CountDocuments(ctx, filter)
 }
 
 // SumCostByBranchAndDateRange calculates total cost of goods sold
 func (r *SaleRepository) SumCostByBranchAndDateRange(ctx context.Context, branchID primitive.ObjectID, from, to string) (float64, error) {
+	coll, err := r.coll(ctx)
+	if err != nil {
+		return 0, err
+	}
 	fromTime, toTime, err := parseDateRange(from, to)
 	if err != nil {
 		return 0, err
@@ -283,7 +327,7 @@ func (r *SaleRepository) SumCostByBranchAndDateRange(ctx context.Context, branch
 		}}},
 	}
 
-	cursor, err := r.collection.Aggregate(ctx, pipeline)
+	cursor, err := coll.Aggregate(ctx, pipeline)
 	if err != nil {
 		return 0, err
 	}
@@ -304,6 +348,10 @@ func (r *SaleRepository) SumCostByBranchAndDateRange(ctx context.Context, branch
 
 // GetUnpaidByBranchID retrieves sales that are not fully paid
 func (r *SaleRepository) GetUnpaidByBranchID(ctx context.Context, branchID primitive.ObjectID) ([]*entity.Sale, error) {
+	coll, err := r.coll(ctx)
+	if err != nil {
+		return nil, err
+	}
 	pipeline := mongo.Pipeline{
 		{{Key: "$match", Value: bson.M{
 			"branch_id": branchID,
@@ -317,7 +365,7 @@ func (r *SaleRepository) GetUnpaidByBranchID(ctx context.Context, branchID primi
 		}}},
 	}
 
-	cursor, err := r.collection.Aggregate(ctx, pipeline)
+	cursor, err := coll.Aggregate(ctx, pipeline)
 	if err != nil {
 		return nil, err
 	}
@@ -332,6 +380,10 @@ func (r *SaleRepository) GetUnpaidByBranchID(ctx context.Context, branchID primi
 
 // GetTopSellingProducts retrieves top selling products based on quantity
 func (r *SaleRepository) GetTopSellingProducts(ctx context.Context, branchID primitive.ObjectID, from, to string, limit int) ([]repository.TopProduct, error) {
+	coll, err := r.coll(ctx)
+	if err != nil {
+		return nil, err
+	}
 	fromTime, toTime, err := parseDateRange(from, to)
 	if err != nil {
 		return nil, err
@@ -354,7 +406,7 @@ func (r *SaleRepository) GetTopSellingProducts(ctx context.Context, branchID pri
 		{{Key: "$limit", Value: int64(limit)}},
 	}
 
-	cursor, err := r.collection.Aggregate(ctx, pipeline)
+	cursor, err := coll.Aggregate(ctx, pipeline)
 	if err != nil {
 		return nil, err
 	}
@@ -369,6 +421,10 @@ func (r *SaleRepository) GetTopSellingProducts(ctx context.Context, branchID pri
 
 // GetEmployeePerformance retrieves sales performance per employee
 func (r *SaleRepository) GetEmployeePerformance(ctx context.Context, branchID primitive.ObjectID, from, to string) ([]repository.EmployeePerformance, error) {
+	coll, err := r.coll(ctx)
+	if err != nil {
+		return nil, err
+	}
 	fromTime, toTime, err := parseDateRange(from, to)
 	if err != nil {
 		return nil, err
@@ -405,7 +461,7 @@ func (r *SaleRepository) GetEmployeePerformance(ctx context.Context, branchID pr
 		}}},
 	}
 
-	cursor, err := r.collection.Aggregate(ctx, pipeline)
+	cursor, err := coll.Aggregate(ctx, pipeline)
 	if err != nil {
 		return nil, err
 	}
@@ -420,6 +476,10 @@ func (r *SaleRepository) GetEmployeePerformance(ctx context.Context, branchID pr
 
 // GetSalesTrends retrieves daily sales trends
 func (r *SaleRepository) GetSalesTrends(ctx context.Context, branchID primitive.ObjectID, from, to string) ([]repository.SalesTrend, error) {
+	coll, err := r.coll(ctx)
+	if err != nil {
+		return nil, err
+	}
 	fromTime, toTime, err := parseDateRange(from, to)
 	if err != nil {
 		return nil, err
@@ -453,7 +513,7 @@ func (r *SaleRepository) GetSalesTrends(ctx context.Context, branchID primitive.
 		{{Key: "$sort", Value: bson.M{"_id": 1}}},
 	}
 
-	cursor, err := r.collection.Aggregate(ctx, pipeline)
+	cursor, err := coll.Aggregate(ctx, pipeline)
 	if err != nil {
 		return nil, err
 	}

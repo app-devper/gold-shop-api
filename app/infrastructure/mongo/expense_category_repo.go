@@ -12,27 +12,37 @@ import (
 )
 
 type expenseCategoryRepository struct {
-	collection *mongo.Collection
+	client *Client
 }
 
 func NewExpenseCategoryRepository(client *Client) repository.ExpenseCategoryRepository {
-	return &expenseCategoryRepository{
-		collection: client.Collection("expense_categories"),
-	}
+	return &expenseCategoryRepository{client: client}
+}
+
+func (r *expenseCategoryRepository) coll(ctx context.Context) (*mongo.Collection, error) {
+	return r.client.CollectionFromCtx(ctx, CollectionExpenseCategories)
 }
 
 func (r *expenseCategoryRepository) Create(ctx context.Context, category *entity.ExpenseCategory) error {
+	coll, err := r.coll(ctx)
+	if err != nil {
+		return err
+	}
 	category.ID = primitive.NewObjectID()
 	category.CreatedAt = time.Now()
 	category.UpdatedAt = time.Now()
 
-	_, err := r.collection.InsertOne(ctx, category)
+	_, err = coll.InsertOne(ctx, category)
 	return err
 }
 
 func (r *expenseCategoryRepository) GetByID(ctx context.Context, id primitive.ObjectID) (*entity.ExpenseCategory, error) {
+	coll, err := r.coll(ctx)
+	if err != nil {
+		return nil, err
+	}
 	var category entity.ExpenseCategory
-	err := r.collection.FindOne(ctx, bson.M{"_id": id}).Decode(&category)
+	err = coll.FindOne(ctx, bson.M{"_id": id}).Decode(&category)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
 			return nil, nil
@@ -43,7 +53,11 @@ func (r *expenseCategoryRepository) GetByID(ctx context.Context, id primitive.Ob
 }
 
 func (r *expenseCategoryRepository) GetAll(ctx context.Context) ([]*entity.ExpenseCategory, error) {
-	cursor, err := r.collection.Find(ctx, bson.M{})
+	coll, err := r.coll(ctx)
+	if err != nil {
+		return nil, err
+	}
+	cursor, err := coll.Find(ctx, bson.M{})
 	if err != nil {
 		return nil, err
 	}
@@ -57,8 +71,12 @@ func (r *expenseCategoryRepository) GetAll(ctx context.Context) ([]*entity.Expen
 }
 
 func (r *expenseCategoryRepository) Update(ctx context.Context, category *entity.ExpenseCategory) error {
+	coll, err := r.coll(ctx)
+	if err != nil {
+		return err
+	}
 	category.UpdatedAt = time.Now()
-	_, err := r.collection.UpdateOne(
+	_, err = coll.UpdateOne(
 		ctx,
 		bson.M{"_id": category.ID},
 		bson.M{"$set": category},
@@ -67,6 +85,10 @@ func (r *expenseCategoryRepository) Update(ctx context.Context, category *entity
 }
 
 func (r *expenseCategoryRepository) Delete(ctx context.Context, id primitive.ObjectID) error {
-	_, err := r.collection.DeleteOne(ctx, bson.M{"_id": id})
+	coll, err := r.coll(ctx)
+	if err != nil {
+		return err
+	}
+	_, err = coll.DeleteOne(ctx, bson.M{"_id": id})
 	return err
 }
