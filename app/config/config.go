@@ -27,7 +27,7 @@ type ServerConfig struct {
 
 type MongoDBConfig struct {
 	URI      string
-	Database string
+	DBPrefix string
 }
 
 type JWTConfig struct {
@@ -74,7 +74,7 @@ func Load() (*Config, error) {
 		},
 		MongoDB: MongoDBConfig{
 			URI:      getEnv("MONGODB_URI", "mongodb://localhost:27017"),
-			Database: getEnv("MONGODB_DATABASE", "gold_shop"),
+			DBPrefix: getEnv("MONGODB_DATABASE", "gold_shop"),
 		},
 		JWT: JWTConfig{
 			Secret:          jwtSecret,

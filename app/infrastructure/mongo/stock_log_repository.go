@@ -11,17 +11,23 @@ import (
 )
 
 type StockLogRepository struct {
-	collection *mongo.Collection
+	client *Client
 }
 
 func NewStockLogRepository(client *Client) *StockLogRepository {
-	return &StockLogRepository{
-		collection: client.Collection(CollectionStockLogs),
-	}
+	return &StockLogRepository{client: client}
+}
+
+func (r *StockLogRepository) coll(ctx context.Context) (*mongo.Collection, error) {
+	return r.client.CollectionFromCtx(ctx, CollectionStockLogs)
 }
 
 func (r *StockLogRepository) Create(ctx context.Context, log *entity.StockLog) error {
-	res, err := r.collection.InsertOne(ctx, log)
+	coll, err := r.coll(ctx)
+	if err != nil {
+		return err
+	}
+	res, err := coll.InsertOne(ctx, log)
 	if err != nil {
 		return err
 	}
@@ -30,7 +36,11 @@ func (r *StockLogRepository) Create(ctx context.Context, log *entity.StockLog) e
 }
 
 func (r *StockLogRepository) GetByProductID(ctx context.Context, productID primitive.ObjectID) ([]*entity.StockLog, error) {
-	cursor, err := r.collection.Find(ctx, bson.M{"product_id": productID}, options.Find().SetSort(bson.M{"created_at": -1}))
+	coll, err := r.coll(ctx)
+	if err != nil {
+		return nil, err
+	}
+	cursor, err := coll.Find(ctx, bson.M{"product_id": productID}, options.Find().SetSort(bson.M{"created_at": -1}))
 	if err != nil {
 		return nil, err
 	}
@@ -44,12 +54,16 @@ func (r *StockLogRepository) GetByProductID(ctx context.Context, productID primi
 }
 
 func (r *StockLogRepository) GetByBranchID(ctx context.Context, branchID primitive.ObjectID, limit, offset int) ([]*entity.StockLog, error) {
+	coll, err := r.coll(ctx)
+	if err != nil {
+		return nil, err
+	}
 	opts := options.Find().
 		SetSort(bson.M{"created_at": -1}).
 		SetLimit(int64(limit)).
 		SetSkip(int64(offset))
 
-	cursor, err := r.collection.Find(ctx, bson.M{"branch_id": branchID}, opts)
+	cursor, err := coll.Find(ctx, bson.M{"branch_id": branchID}, opts)
 	if err != nil {
 		return nil, err
 	}

@@ -13,21 +13,27 @@ import (
 
 // GoldPriceRepository implements repository.GoldPriceRepository
 type GoldPriceRepository struct {
-	collection *mongo.Collection
+	client *Client
 }
 
 // NewGoldPriceRepository creates a new GoldPriceRepository
 func NewGoldPriceRepository(client *Client) *GoldPriceRepository {
-	return &GoldPriceRepository{
-		collection: client.Collection(CollectionGoldPrices),
-	}
+	return &GoldPriceRepository{client: client}
+}
+
+func (r *GoldPriceRepository) coll(ctx context.Context) (*mongo.Collection, error) {
+	return r.client.CollectionFromCtx(ctx, CollectionGoldPrices)
 }
 
 // Create creates a new gold price record
 func (r *GoldPriceRepository) Create(ctx context.Context, price *entity.GoldPrice) error {
+	coll, err := r.coll(ctx)
+	if err != nil {
+		return err
+	}
 	price.CreatedAt = time.Now()
 
-	result, err := r.collection.InsertOne(ctx, price)
+	result, err := coll.InsertOne(ctx, price)
 	if err != nil {
 		return err
 	}
@@ -38,10 +44,14 @@ func (r *GoldPriceRepository) Create(ctx context.Context, price *entity.GoldPric
 
 // GetCurrent retrieves the current active gold price
 func (r *GoldPriceRepository) GetCurrent(ctx context.Context) (*entity.GoldPrice, error) {
+	coll, err := r.coll(ctx)
+	if err != nil {
+		return nil, err
+	}
 	var price entity.GoldPrice
 	opts := options.FindOne().SetSort(bson.D{{Key: "created_at", Value: -1}})
 
-	err := r.collection.FindOne(ctx, bson.M{"is_active": true}, opts).Decode(&price)
+	err = coll.FindOne(ctx, bson.M{"is_active": true}, opts).Decode(&price)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
 			return nil, entity.ErrNotFound
@@ -53,11 +63,15 @@ func (r *GoldPriceRepository) GetCurrent(ctx context.Context) (*entity.GoldPrice
 
 // GetHistory retrieves gold price history
 func (r *GoldPriceRepository) GetHistory(ctx context.Context, limit int) ([]*entity.GoldPrice, error) {
+	coll, err := r.coll(ctx)
+	if err != nil {
+		return nil, err
+	}
 	opts := options.Find().
 		SetLimit(int64(limit)).
 		SetSort(bson.D{{Key: "created_at", Value: -1}})
 
-	cursor, err := r.collection.Find(ctx, bson.M{}, opts)
+	cursor, err := coll.Find(ctx, bson.M{}, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -72,6 +86,10 @@ func (r *GoldPriceRepository) GetHistory(ctx context.Context, limit int) ([]*ent
 
 // GetByDateRange retrieves gold prices by date range
 func (r *GoldPriceRepository) GetByDateRange(ctx context.Context, from, to string) ([]*entity.GoldPrice, error) {
+	coll, err := r.coll(ctx)
+	if err != nil {
+		return nil, err
+	}
 	fromTime, _ := time.Parse("2006-01-02", from)
 	toTime, _ := time.Parse("2006-01-02", to)
 	toTime = toTime.Add(24 * time.Hour)
@@ -84,7 +102,7 @@ func (r *GoldPriceRepository) GetByDateRange(ctx context.Context, from, to strin
 	}
 
 	opts := options.Find().SetSort(bson.D{{Key: "date", Value: -1}})
-	cursor, err := r.collection.Find(ctx, filter, opts)
+	cursor, err := coll.Find(ctx, filter, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -99,6 +117,10 @@ func (r *GoldPriceRepository) GetByDateRange(ctx context.Context, from, to strin
 
 // DeactivateAll deactivates all gold prices
 func (r *GoldPriceRepository) DeactivateAll(ctx context.Context) error {
-	_, err := r.collection.UpdateMany(ctx, bson.M{"is_active": true}, bson.M{"$set": bson.M{"is_active": false}})
+	coll, err := r.coll(ctx)
+	if err != nil {
+		return err
+	}
+	_, err = coll.UpdateMany(ctx, bson.M{"is_active": true}, bson.M{"$set": bson.M{"is_active": false}})
 	return err
 }

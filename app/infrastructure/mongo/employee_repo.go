@@ -8,44 +8,34 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 const CollectionEmployees = "employees"
 
 // EmployeeRepository implements repository.EmployeeRepository
 type EmployeeRepository struct {
-	collection *mongo.Collection
+	client *Client
 }
 
 // NewEmployeeRepository creates a new EmployeeRepository
 func NewEmployeeRepository(client *Client) *EmployeeRepository {
-	repo := &EmployeeRepository{
-		collection: client.Collection(CollectionEmployees),
-	}
-	repo.ensureIndexes()
-	return repo
+	return &EmployeeRepository{client: client}
 }
 
-func (r *EmployeeRepository) ensureIndexes() {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	r.collection.Indexes().CreateOne(ctx, mongo.IndexModel{
-		Keys: bson.D{{Key: "branchId", Value: 1}},
-	})
-	r.collection.Indexes().CreateOne(ctx, mongo.IndexModel{
-		Keys:    bson.D{{Key: "userId", Value: 1}},
-		Options: options.Index().SetUnique(true),
-	})
+func (r *EmployeeRepository) coll(ctx context.Context) (*mongo.Collection, error) {
+	return r.client.CollectionFromCtx(ctx, CollectionEmployees)
 }
 
 // Create creates a new employee
 func (r *EmployeeRepository) Create(ctx context.Context, emp *entity.Employee) error {
+	coll, err := r.coll(ctx)
+	if err != nil {
+		return err
+	}
 	emp.ID = primitive.NewObjectID()
 	emp.CreatedDate = time.Now()
 	emp.UpdatedDate = time.Now()
-	_, err := r.collection.InsertOne(ctx, emp)
+	_, err = coll.InsertOne(ctx, emp)
 	if err != nil {
 		if mongo.IsDuplicateKeyError(err) {
 			return entity.ErrDuplicateKey
@@ -57,8 +47,12 @@ func (r *EmployeeRepository) Create(ctx context.Context, emp *entity.Employee) e
 
 // GetByID retrieves an employee by ID
 func (r *EmployeeRepository) GetByID(ctx context.Context, id primitive.ObjectID) (*entity.Employee, error) {
+	coll, err := r.coll(ctx)
+	if err != nil {
+		return nil, err
+	}
 	var emp entity.Employee
-	err := r.collection.FindOne(ctx, bson.M{"_id": id}).Decode(&emp)
+	err = coll.FindOne(ctx, bson.M{"_id": id}).Decode(&emp)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
 			return nil, entity.ErrNotFound
@@ -70,8 +64,12 @@ func (r *EmployeeRepository) GetByID(ctx context.Context, id primitive.ObjectID)
 
 // GetByUserID retrieves an employee by userId
 func (r *EmployeeRepository) GetByUserID(ctx context.Context, userID string) (*entity.Employee, error) {
+	coll, err := r.coll(ctx)
+	if err != nil {
+		return nil, err
+	}
 	var emp entity.Employee
-	err := r.collection.FindOne(ctx, bson.M{"userId": userID}).Decode(&emp)
+	err = coll.FindOne(ctx, bson.M{"userId": userID}).Decode(&emp)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
 			return nil, entity.ErrNotFound
@@ -83,7 +81,11 @@ func (r *EmployeeRepository) GetByUserID(ctx context.Context, userID string) (*e
 
 // GetAll retrieves all employees
 func (r *EmployeeRepository) GetAll(ctx context.Context) ([]*entity.Employee, error) {
-	cursor, err := r.collection.Find(ctx, bson.M{})
+	coll, err := r.coll(ctx)
+	if err != nil {
+		return nil, err
+	}
+	cursor, err := coll.Find(ctx, bson.M{})
 	if err != nil {
 		return nil, err
 	}
@@ -101,7 +103,11 @@ func (r *EmployeeRepository) GetAll(ctx context.Context) ([]*entity.Employee, er
 
 // GetByBranchID retrieves employees by branch ID
 func (r *EmployeeRepository) GetByBranchID(ctx context.Context, branchID primitive.ObjectID) ([]*entity.Employee, error) {
-	cursor, err := r.collection.Find(ctx, bson.M{"branchId": branchID})
+	coll, err := r.coll(ctx)
+	if err != nil {
+		return nil, err
+	}
+	cursor, err := coll.Find(ctx, bson.M{"branchId": branchID})
 	if err != nil {
 		return nil, err
 	}
@@ -119,8 +125,12 @@ func (r *EmployeeRepository) GetByBranchID(ctx context.Context, branchID primiti
 
 // Update updates an employee
 func (r *EmployeeRepository) Update(ctx context.Context, emp *entity.Employee) error {
+	coll, err := r.coll(ctx)
+	if err != nil {
+		return err
+	}
 	emp.UpdatedDate = time.Now()
-	result, err := r.collection.ReplaceOne(ctx, bson.M{"_id": emp.ID}, emp)
+	result, err := coll.ReplaceOne(ctx, bson.M{"_id": emp.ID}, emp)
 	if err != nil {
 		return err
 	}
@@ -132,7 +142,11 @@ func (r *EmployeeRepository) Update(ctx context.Context, emp *entity.Employee) e
 
 // Delete deletes an employee
 func (r *EmployeeRepository) Delete(ctx context.Context, id primitive.ObjectID) error {
-	result, err := r.collection.DeleteOne(ctx, bson.M{"_id": id})
+	coll, err := r.coll(ctx)
+	if err != nil {
+		return err
+	}
+	result, err := coll.DeleteOne(ctx, bson.M{"_id": id})
 	if err != nil {
 		return err
 	}

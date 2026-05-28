@@ -11,19 +11,25 @@ import (
 )
 
 type ProductItemRepository struct {
-	collection *mongo.Collection
+	client *Client
 }
 
 func NewProductItemRepository(client *Client) *ProductItemRepository {
-	return &ProductItemRepository{
-		collection: client.Collection(CollectionProductItems),
-	}
+	return &ProductItemRepository{client: client}
+}
+
+func (r *ProductItemRepository) coll(ctx context.Context) (*mongo.Collection, error) {
+	return r.client.CollectionFromCtx(ctx, CollectionProductItems)
 }
 
 func (r *ProductItemRepository) Create(ctx context.Context, item *entity.ProductItem) error {
+	coll, err := r.coll(ctx)
+	if err != nil {
+		return err
+	}
 	item.CreatedAt = time.Now()
 	item.UpdatedAt = time.Now()
-	res, err := r.collection.InsertOne(ctx, item)
+	res, err := coll.InsertOne(ctx, item)
 	if err != nil {
 		return err
 	}
@@ -32,8 +38,12 @@ func (r *ProductItemRepository) Create(ctx context.Context, item *entity.Product
 }
 
 func (r *ProductItemRepository) GetByID(ctx context.Context, id primitive.ObjectID) (*entity.ProductItem, error) {
+	coll, err := r.coll(ctx)
+	if err != nil {
+		return nil, err
+	}
 	var item entity.ProductItem
-	err := r.collection.FindOne(ctx, bson.M{"_id": id}).Decode(&item)
+	err = coll.FindOne(ctx, bson.M{"_id": id}).Decode(&item)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
 			return nil, nil
@@ -44,8 +54,12 @@ func (r *ProductItemRepository) GetByID(ctx context.Context, id primitive.Object
 }
 
 func (r *ProductItemRepository) GetByBarcode(ctx context.Context, barcode string) (*entity.ProductItem, error) {
+	coll, err := r.coll(ctx)
+	if err != nil {
+		return nil, err
+	}
 	var item entity.ProductItem
-	err := r.collection.FindOne(ctx, bson.M{"barcode": barcode}).Decode(&item)
+	err = coll.FindOne(ctx, bson.M{"barcode": barcode}).Decode(&item)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
 			return nil, nil
@@ -56,12 +70,16 @@ func (r *ProductItemRepository) GetByBarcode(ctx context.Context, barcode string
 }
 
 func (r *ProductItemRepository) GetByProductID(ctx context.Context, productID primitive.ObjectID, status []entity.ProductStatus) ([]*entity.ProductItem, error) {
+	coll, err := r.coll(ctx)
+	if err != nil {
+		return nil, err
+	}
 	filter := bson.M{"product_id": productID}
 	if len(status) > 0 {
 		filter["status"] = bson.M{"$in": status}
 	}
 
-	cursor, err := r.collection.Find(ctx, filter)
+	cursor, err := coll.Find(ctx, filter)
 	if err != nil {
 		return nil, err
 	}
@@ -75,12 +93,16 @@ func (r *ProductItemRepository) GetByProductID(ctx context.Context, productID pr
 }
 
 func (r *ProductItemRepository) GetByBranchID(ctx context.Context, branchID primitive.ObjectID, status []entity.ProductStatus) ([]*entity.ProductItem, error) {
+	coll, err := r.coll(ctx)
+	if err != nil {
+		return nil, err
+	}
 	filter := bson.M{"branch_id": branchID}
 	if len(status) > 0 {
 		filter["status"] = bson.M{"$in": status}
 	}
 
-	cursor, err := r.collection.Find(ctx, filter)
+	cursor, err := coll.Find(ctx, filter)
 	if err != nil {
 		return nil, err
 	}
@@ -94,12 +116,20 @@ func (r *ProductItemRepository) GetByBranchID(ctx context.Context, branchID prim
 }
 
 func (r *ProductItemRepository) Update(ctx context.Context, item *entity.ProductItem) error {
+	coll, err := r.coll(ctx)
+	if err != nil {
+		return err
+	}
 	item.UpdatedAt = time.Now()
-	_, err := r.collection.ReplaceOne(ctx, bson.M{"_id": item.ID}, item)
+	_, err = coll.ReplaceOne(ctx, bson.M{"_id": item.ID}, item)
 	return err
 }
 
 func (r *ProductItemRepository) Delete(ctx context.Context, id primitive.ObjectID) error {
-	_, err := r.collection.DeleteOne(ctx, bson.M{"_id": id})
+	coll, err := r.coll(ctx)
+	if err != nil {
+		return err
+	}
+	_, err = coll.DeleteOne(ctx, bson.M{"_id": id})
 	return err
 }

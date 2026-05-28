@@ -5,26 +5,25 @@ import (
 	"fmt"
 
 	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 const CollectionCounters = "counters"
 
-// CounterRepository provides atomic counter operations
 type CounterRepository struct {
-	collection *mongo.Collection
+	client *Client
 }
 
-// NewCounterRepository creates a new CounterRepository
 func NewCounterRepository(client *Client) *CounterRepository {
-	return &CounterRepository{
-		collection: client.Collection(CollectionCounters),
-	}
+	return &CounterRepository{client: client}
 }
 
-// NextSequence atomically increments and returns the next sequence number for a given key
 func (r *CounterRepository) NextSequence(ctx context.Context, key string) (int, error) {
+	coll, err := r.client.CollectionFromCtx(ctx, CollectionCounters)
+	if err != nil {
+		return 0, err
+	}
+
 	filter := bson.M{"_id": key}
 	update := bson.M{"$inc": bson.M{"seq": 1}}
 	opts := options.FindOneAndUpdate().
@@ -34,7 +33,7 @@ func (r *CounterRepository) NextSequence(ctx context.Context, key string) (int, 
 	var result struct {
 		Seq int `bson:"seq"`
 	}
-	err := r.collection.FindOneAndUpdate(ctx, filter, update, opts).Decode(&result)
+	err = coll.FindOneAndUpdate(ctx, filter, update, opts).Decode(&result)
 	if err != nil {
 		return 0, fmt.Errorf("failed to get next sequence for %s: %w", key, err)
 	}

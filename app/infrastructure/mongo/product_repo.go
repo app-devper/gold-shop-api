@@ -13,17 +13,25 @@ import (
 
 // ProductRepository implements repository.ProductRepository.
 type ProductRepository struct {
-	collection *mongo.Collection
+	client *Client
 }
 
 func NewProductRepository(client *Client) *ProductRepository {
-	return &ProductRepository{collection: client.Collection(CollectionProducts)}
+	return &ProductRepository{client: client}
+}
+
+func (r *ProductRepository) coll(ctx context.Context) (*mongo.Collection, error) {
+	return r.client.CollectionFromCtx(ctx, CollectionProducts)
 }
 
 func (r *ProductRepository) Create(ctx context.Context, product *entity.Product) error {
+	coll, err := r.coll(ctx)
+	if err != nil {
+		return err
+	}
 	product.CreatedAt = time.Now()
 	product.UpdatedAt = time.Now()
-	result, err := r.collection.InsertOne(ctx, product)
+	result, err := coll.InsertOne(ctx, product)
 	if err != nil {
 		if mongo.IsDuplicateKeyError(err) {
 			return entity.ErrDuplicateKey
@@ -35,8 +43,12 @@ func (r *ProductRepository) Create(ctx context.Context, product *entity.Product)
 }
 
 func (r *ProductRepository) GetByID(ctx context.Context, id primitive.ObjectID) (*entity.Product, error) {
+	coll, err := r.coll(ctx)
+	if err != nil {
+		return nil, err
+	}
 	var product entity.Product
-	if err := r.collection.FindOne(ctx, bson.M{"_id": id}).Decode(&product); err != nil {
+	if err := coll.FindOne(ctx, bson.M{"_id": id}).Decode(&product); err != nil {
 		if err == mongo.ErrNoDocuments {
 			return nil, entity.ErrNotFound
 		}
@@ -46,8 +58,12 @@ func (r *ProductRepository) GetByID(ctx context.Context, id primitive.ObjectID) 
 }
 
 func (r *ProductRepository) GetBySKU(ctx context.Context, sku string) (*entity.Product, error) {
+	coll, err := r.coll(ctx)
+	if err != nil {
+		return nil, err
+	}
 	var product entity.Product
-	if err := r.collection.FindOne(ctx, bson.M{"sku": sku}).Decode(&product); err != nil {
+	if err := coll.FindOne(ctx, bson.M{"sku": sku}).Decode(&product); err != nil {
 		if err == mongo.ErrNoDocuments {
 			return nil, entity.ErrNotFound
 		}
@@ -64,6 +80,10 @@ func (r *ProductRepository) GetBySKU(ctx context.Context, sku string) (*entity.P
 func (r *ProductRepository) GetByBranchID(
 	ctx context.Context, branchID primitive.ObjectID, kind entity.ProductKind, search string, limit, offset int,
 ) ([]*entity.Product, error) {
+	coll, err := r.coll(ctx)
+	if err != nil {
+		return nil, err
+	}
 	filter := bson.M{"branch_id": branchID, "is_active": true}
 	if kind != "" {
 		filter["kind"] = kind
@@ -81,7 +101,7 @@ func (r *ProductRepository) GetByBranchID(
 		SetSkip(int64(offset)).
 		SetSort(bson.D{{Key: "created_at", Value: -1}})
 
-	cursor, err := r.collection.Find(ctx, filter, opts)
+	cursor, err := coll.Find(ctx, filter, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -95,8 +115,12 @@ func (r *ProductRepository) GetByBranchID(
 }
 
 func (r *ProductRepository) Update(ctx context.Context, product *entity.Product) error {
+	coll, err := r.coll(ctx)
+	if err != nil {
+		return err
+	}
 	product.UpdatedAt = time.Now()
-	result, err := r.collection.ReplaceOne(ctx, bson.M{"_id": product.ID}, product)
+	result, err := coll.ReplaceOne(ctx, bson.M{"_id": product.ID}, product)
 	if err != nil {
 		return err
 	}
@@ -109,7 +133,11 @@ func (r *ProductRepository) Update(ctx context.Context, product *entity.Product)
 // Delete soft-deletes by flipping IsActive=false; we keep the row so historical
 // sales can still resolve product_id → name.
 func (r *ProductRepository) Delete(ctx context.Context, id primitive.ObjectID) error {
-	result, err := r.collection.UpdateOne(ctx,
+	coll, err := r.coll(ctx)
+	if err != nil {
+		return err
+	}
+	result, err := coll.UpdateOne(ctx,
 		bson.M{"_id": id},
 		bson.M{"$set": bson.M{"is_active": false, "updated_at": time.Now()}},
 	)
@@ -123,5 +151,9 @@ func (r *ProductRepository) Delete(ctx context.Context, id primitive.ObjectID) e
 }
 
 func (r *ProductRepository) Count(ctx context.Context, branchID primitive.ObjectID) (int64, error) {
-	return r.collection.CountDocuments(ctx, bson.M{"branch_id": branchID, "is_active": true})
+	coll, err := r.coll(ctx)
+	if err != nil {
+		return 0, err
+	}
+	return coll.CountDocuments(ctx, bson.M{"branch_id": branchID, "is_active": true})
 }

@@ -13,27 +13,37 @@ import (
 )
 
 type inventoryTransferRepository struct {
-	collection *mongo.Collection
+	client *Client
 }
 
 func NewInventoryTransferRepository(client *Client) repository.InventoryTransferRepository {
-	return &inventoryTransferRepository{
-		collection: client.Collection("inventory_transfers"),
-	}
+	return &inventoryTransferRepository{client: client}
+}
+
+func (r *inventoryTransferRepository) coll(ctx context.Context) (*mongo.Collection, error) {
+	return r.client.CollectionFromCtx(ctx, CollectionInventoryTransfers)
 }
 
 func (r *inventoryTransferRepository) Create(ctx context.Context, transfer *entity.InventoryTransfer) error {
+	coll, err := r.coll(ctx)
+	if err != nil {
+		return err
+	}
 	transfer.ID = primitive.NewObjectID()
 	transfer.CreatedAt = time.Now()
 	transfer.UpdatedAt = time.Now()
 
-	_, err := r.collection.InsertOne(ctx, transfer)
+	_, err = coll.InsertOne(ctx, transfer)
 	return err
 }
 
 func (r *inventoryTransferRepository) GetByID(ctx context.Context, id primitive.ObjectID) (*entity.InventoryTransfer, error) {
+	coll, err := r.coll(ctx)
+	if err != nil {
+		return nil, err
+	}
 	var transfer entity.InventoryTransfer
-	err := r.collection.FindOne(ctx, bson.M{"_id": id}).Decode(&transfer)
+	err = coll.FindOne(ctx, bson.M{"_id": id}).Decode(&transfer)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
 			return nil, nil
@@ -44,8 +54,12 @@ func (r *inventoryTransferRepository) GetByID(ctx context.Context, id primitive.
 }
 
 func (r *inventoryTransferRepository) GetByTransferNumber(ctx context.Context, transferNumber string) (*entity.InventoryTransfer, error) {
+	coll, err := r.coll(ctx)
+	if err != nil {
+		return nil, err
+	}
 	var transfer entity.InventoryTransfer
-	err := r.collection.FindOne(ctx, bson.M{"transfer_number": transferNumber}).Decode(&transfer)
+	err = coll.FindOne(ctx, bson.M{"transfer_number": transferNumber}).Decode(&transfer)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
 			return nil, nil
@@ -56,12 +70,16 @@ func (r *inventoryTransferRepository) GetByTransferNumber(ctx context.Context, t
 }
 
 func (r *inventoryTransferRepository) GetByFromBranchID(ctx context.Context, branchID primitive.ObjectID, status []entity.TransferStatus) ([]*entity.InventoryTransfer, error) {
+	coll, err := r.coll(ctx)
+	if err != nil {
+		return nil, err
+	}
 	filter := bson.M{"from_branch_id": branchID}
 	if len(status) > 0 {
 		filter["status"] = bson.M{"$in": status}
 	}
 
-	cursor, err := r.collection.Find(ctx, filter)
+	cursor, err := coll.Find(ctx, filter)
 	if err != nil {
 		return nil, err
 	}
@@ -75,12 +93,16 @@ func (r *inventoryTransferRepository) GetByFromBranchID(ctx context.Context, bra
 }
 
 func (r *inventoryTransferRepository) GetByToBranchID(ctx context.Context, branchID primitive.ObjectID, status []entity.TransferStatus) ([]*entity.InventoryTransfer, error) {
+	coll, err := r.coll(ctx)
+	if err != nil {
+		return nil, err
+	}
 	filter := bson.M{"to_branch_id": branchID}
 	if len(status) > 0 {
 		filter["status"] = bson.M{"$in": status}
 	}
 
-	cursor, err := r.collection.Find(ctx, filter)
+	cursor, err := coll.Find(ctx, filter)
 	if err != nil {
 		return nil, err
 	}
@@ -94,8 +116,12 @@ func (r *inventoryTransferRepository) GetByToBranchID(ctx context.Context, branc
 }
 
 func (r *inventoryTransferRepository) Update(ctx context.Context, transfer *entity.InventoryTransfer) error {
+	coll, err := r.coll(ctx)
+	if err != nil {
+		return err
+	}
 	transfer.UpdatedAt = time.Now()
-	_, err := r.collection.UpdateOne(
+	_, err = coll.UpdateOne(
 		ctx,
 		bson.M{"_id": transfer.ID},
 		bson.M{"$set": transfer},
@@ -104,14 +130,14 @@ func (r *inventoryTransferRepository) Update(ctx context.Context, transfer *enti
 }
 
 func (r *inventoryTransferRepository) GenerateTransferNumber(ctx context.Context) (string, error) {
+	coll, err := r.coll(ctx)
+	if err != nil {
+		return "", err
+	}
 	// Format: TR-YYYYMMDD-XXXX
 	prefix := fmt.Sprintf("TR-%s", time.Now().Format("20060102"))
 
-	// Count documents with this prefix today to determine sequence
-	// Simplified implementation: using regex or just counting total for day if heavy traffic is not expected
-	// Better approach: Maintain a sequence counter in a separate collection
-
-	count, err := r.collection.CountDocuments(ctx, bson.M{
+	count, err := coll.CountDocuments(ctx, bson.M{
 		"transfer_number": bson.M{"$regex": "^" + prefix},
 	})
 	if err != nil {

@@ -7,6 +7,7 @@ import (
 
 	"github.com/devper-gold/gold-shop-api/app/domain/entity"
 	"github.com/devper-gold/gold-shop-api/app/domain/repository"
+	mongoinfra "github.com/devper-gold/gold-shop-api/app/infrastructure/mongo"
 	"github.com/devper-gold/gold-shop-api/pkg/utils"
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
@@ -66,13 +67,28 @@ func RequireAuthenticated(secretKey string) gin.HandlerFunc {
 	}
 }
 
+func RequireTenant() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		clientID := c.GetString("ClientId")
+		if err := mongoinfra.ValidateClientID(clientID); err != nil {
+			logrus.Warnf("RequireTenant: rejecting request: %v", err)
+			utils.UnauthorizedResponse(c, "AUT-401-004", "invalid tenant")
+			c.Abort()
+			return
+		}
+		ctx := mongoinfra.WithClientID(c.Request.Context(), clientID)
+		c.Request = c.Request.WithContext(ctx)
+		c.Next()
+	}
+}
+
 // RequireSession validates the session in Redis and sets UserId in context
 func RequireSession(sessionRepo SessionLookup) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		sessionId := c.GetString("SessionId")
 		userId, err := sessionRepo.GetSessionById(c.Request.Context(), sessionId)
 		if err != nil {
-			utils.UnauthorizedResponse(c, "AUT-401-004", "session invalid")
+			utils.UnauthorizedResponse(c, "AUT-401-005", "session invalid")
 			c.Abort()
 			return
 		}
