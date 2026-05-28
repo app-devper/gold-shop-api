@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/devper-gold/gold-shop-api/app/domain/entity"
@@ -16,7 +17,7 @@ import (
 func newTenantSeeder(goldAPIClient gold_price_app.ExternalGoldPriceAPI) mongoinfra.Seeder {
 	return func(ctx context.Context, db *mongo.Database) error {
 		if err := ensureEmployeeIndexes(ctx, db); err != nil {
-			logrus.Warnf("seed: ensure employee indexes: %v", err)
+			return fmt.Errorf("ensure employee indexes: %w", err)
 		}
 		if err := seedHQBranch(ctx, db); err != nil {
 			return err

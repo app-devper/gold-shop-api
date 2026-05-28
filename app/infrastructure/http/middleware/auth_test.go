@@ -3,6 +3,7 @@ package middleware
 import (
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 
 	mongoinfra "github.com/devper-gold/gold-shop-api/app/infrastructure/mongo"
@@ -11,7 +12,7 @@ import (
 
 func TestMain(m *testing.M) {
 	gin.SetMode(gin.TestMode)
-	m.Run()
+	os.Exit(m.Run())
 }
 
 func TestRequireTenant(t *testing.T) {
