@@ -37,8 +37,7 @@ func Setup(r *gin.Engine, secretKey string, sessionRepo middleware.SessionLookup
 		c.JSON(200, gin.H{"status": "ok"})
 	})
 
-	// API v1
-	api := r.Group("/api/v1")
+	api := r.Group("/api/gold/v1")
 
 	// Protected routes: RequireAuthenticated → RequireTenant → RequireSession → RequireBranch
 	protected := api.Group("")

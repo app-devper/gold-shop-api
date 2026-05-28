@@ -49,7 +49,7 @@ One instance serves many shops. The Mongo `Client` ([app/infrastructure/mongo/cl
 
 ### Auth & middleware chain
 
-All `/api/v1` routes go through (in [router.go:46-51](app/infrastructure/http/router/router.go#L46-L51)):
+All `/api/gold/v1` routes go through (in [router.go:45-50](app/infrastructure/http/router/router.go#L45-L50)):
 
 1. `RequireAuthenticated(secretKey)` — validates HMAC-SHA256 JWT from `um-api`, sets `SessionId`, `Role` (UM role from JWT), `System`, `ClientId`.
 2. `RequireTenant()` — validates `ClientId` against `mongo.ValidateClientID` (rejects empty / unsafe DB-name characters with 401) and copies it from gin ctx into the request's `context.Context` via `mongo.WithClientID`. Must run **before** any middleware/handler that touches Mongo.
@@ -104,4 +104,4 @@ Atomic via the per-tenant `counters` collection ([mongo/counter_repo.go](app/inf
 - **Don't change `SECRET_KEY` semantics or session-key format** without also updating `um-api` — JWT signing and the `session:<id>` Redis key shape are a contract owned by `um-api`.
 - This service shares Redis with all other workspace services. The only key it reads is `session:<id>`. Don't write to Redis from this service.
 - Mongo cluster is shared across tenants of this service; if another service shares the same `MONGODB_URI`, make sure its DB names don't collide with the `<dbPrefix>_<clientId>` pattern used here (default prefix `gold_shop`).
-- API base path is `/api/v1` (note: gold uses `/api/v1`, not `/api/gold/v1` like the sibling services).
+- API base path is `/api/gold/v1`. The service is fronted by the `devper-api` Firebase Hosting gateway ([../../devper-api/firebase.json](../../devper-api/firebase.json)) which rewrites `/api/gold/**` to Cloud Run service `devper-gold` in `asia-southeast1`. Clients should call the gateway, not the Cloud Run URL directly.
