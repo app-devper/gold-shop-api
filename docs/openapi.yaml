@@ -49,7 +49,7 @@ paths:
                     type: string
                     example: ok
 
-  /api/v1/branches:
+  /api/gold/v1/branches:
     get:
       tags: [Branches]
       summary: List all branches
@@ -81,7 +81,7 @@ paths:
         "403":
           $ref: "#/components/responses/Forbidden"
 
-  /api/v1/branches/{id}:
+  /api/gold/v1/branches/{id}:
     parameters:
       - $ref: "#/components/parameters/ID"
     get:
@@ -127,7 +127,7 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
-  /api/v1/employees:
+  /api/gold/v1/employees:
     get:
       tags: [Employees]
       summary: List all employees
@@ -159,7 +159,7 @@ paths:
         "403":
           $ref: "#/components/responses/Forbidden"
 
-  /api/v1/employees/branch/{branchId}:
+  /api/gold/v1/employees/branch/{branchId}:
     parameters:
       - name: branchId
         in: path
@@ -177,7 +177,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/EmployeeListResponse"
 
-  /api/v1/employees/{id}:
+  /api/gold/v1/employees/{id}:
     parameters:
       - $ref: "#/components/parameters/ID"
     get:
@@ -223,7 +223,7 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
-  /api/v1/gold-prices/current:
+  /api/gold/v1/gold-prices/current:
     get:
       tags: [Gold Prices]
       summary: Get current gold prices
@@ -235,7 +235,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/GoldPriceResponse"
 
-  /api/v1/gold-prices/history:
+  /api/gold/v1/gold-prices/history:
     get:
       tags: [Gold Prices]
       summary: Get gold price history
@@ -258,7 +258,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/GoldPriceListResponse"
 
-  /api/v1/gold-prices:
+  /api/gold/v1/gold-prices:
     post:
       tags: [Gold Prices]
       summary: Set gold price manually — ADMIN, MANAGER
@@ -278,7 +278,7 @@ paths:
         "403":
           $ref: "#/components/responses/Forbidden"
 
-  /api/v1/gold-prices/sync:
+  /api/gold/v1/gold-prices/sync:
     post:
       tags: [Gold Prices]
       summary: Sync gold price from external API — ADMIN, MANAGER
@@ -292,7 +292,7 @@ paths:
         "403":
           $ref: "#/components/responses/Forbidden"
 
-  /api/v1/sales:
+  /api/gold/v1/sales:
     get:
       tags: [Sales]
       summary: List sales
@@ -342,7 +342,7 @@ paths:
         "400":
           $ref: "#/components/responses/BadRequest"
 
-  /api/v1/sales/unpaid:
+  /api/gold/v1/sales/unpaid:
     get:
       tags: [Sales]
       summary: Get unpaid sales for the current branch
@@ -354,7 +354,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/SaleListResponse"
 
-  /api/v1/sales/{id}:
+  /api/gold/v1/sales/{id}:
     parameters:
       - $ref: "#/components/parameters/ID"
     get:
@@ -370,7 +370,7 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
-  /api/v1/sales/{id}/cancel:
+  /api/gold/v1/sales/{id}/cancel:
     parameters:
       - $ref: "#/components/parameters/ID"
     post:
@@ -386,7 +386,7 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
-  /api/v1/sales/{id}/receipt:
+  /api/gold/v1/sales/{id}/receipt:
     parameters:
       - $ref: "#/components/parameters/ID"
     get:
@@ -402,7 +402,7 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
-  /api/v1/pawns:
+  /api/gold/v1/pawns:
     get:
       tags: [Pawns]
       summary: List pawn tickets
@@ -452,7 +452,7 @@ paths:
         "400":
           $ref: "#/components/responses/BadRequest"
 
-  /api/v1/pawns/due-soon:
+  /api/gold/v1/pawns/due-soon:
     get:
       tags: [Pawns]
       summary: Get pawns due soon
@@ -470,7 +470,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/PawnListResponse"
 
-  /api/v1/pawns/{id}:
+  /api/gold/v1/pawns/{id}:
     parameters:
       - $ref: "#/components/parameters/ID"
     get:
@@ -486,7 +486,7 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
-  /api/v1/pawns/{id}/pay-interest:
+  /api/gold/v1/pawns/{id}/pay-interest:
     parameters:
       - $ref: "#/components/parameters/ID"
     post:
@@ -513,7 +513,7 @@ paths:
         "400":
           $ref: "#/components/responses/BadRequest"
 
-  /api/v1/pawns/{id}/redeem:
+  /api/gold/v1/pawns/{id}/redeem:
     parameters:
       - $ref: "#/components/parameters/ID"
     post:
@@ -542,7 +542,7 @@ paths:
         "400":
           $ref: "#/components/responses/BadRequest"
 
-  /api/v1/pawns/{id}/extend:
+  /api/gold/v1/pawns/{id}/extend:
     parameters:
       - $ref: "#/components/parameters/ID"
     post:
@@ -569,7 +569,7 @@ paths:
         "400":
           $ref: "#/components/responses/BadRequest"
 
-  /api/v1/pawns/{id}/forfeit:
+  /api/gold/v1/pawns/{id}/forfeit:
     parameters:
       - $ref: "#/components/parameters/ID"
     post:
@@ -585,7 +585,7 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
-  /api/v1/gold-savings:
+  /api/gold/v1/gold-savings:
     get:
       tags: [Gold Savings]
       summary: List gold saving accounts
@@ -621,7 +621,7 @@ paths:
         "400":
           $ref: "#/components/responses/BadRequest"
 
-  /api/v1/gold-savings/{id}:
+  /api/gold/v1/gold-savings/{id}:
     parameters:
       - $ref: "#/components/parameters/ID"
     get:
@@ -637,7 +637,7 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
-  /api/v1/gold-savings/{id}/deposit:
+  /api/gold/v1/gold-savings/{id}/deposit:
     parameters:
       - $ref: "#/components/parameters/ID"
     post:
@@ -663,7 +663,7 @@ paths:
         "400":
           $ref: "#/components/responses/BadRequest"
 
-  /api/v1/gold-savings/{id}/withdraw:
+  /api/gold/v1/gold-savings/{id}/withdraw:
     parameters:
       - $ref: "#/components/parameters/ID"
     post:
@@ -693,7 +693,7 @@ paths:
         "400":
           $ref: "#/components/responses/BadRequest"
 
-  /api/v1/gold-savings/{id}/close:
+  /api/gold/v1/gold-savings/{id}/close:
     parameters:
       - $ref: "#/components/parameters/ID"
     post:
@@ -709,7 +709,7 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
-  /api/v1/gold-savings/{id}/statement:
+  /api/gold/v1/gold-savings/{id}/statement:
     parameters:
       - $ref: "#/components/parameters/ID"
     get:
@@ -725,7 +725,7 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
-  /api/v1/product-categories:
+  /api/gold/v1/product-categories:
     get:
       tags: [Product Categories]
       summary: List product categories
@@ -755,7 +755,7 @@ paths:
         "403":
           $ref: "#/components/responses/Forbidden"
 
-  /api/v1/products:
+  /api/gold/v1/products:
     get:
       tags: [Products]
       summary: List products
@@ -805,7 +805,7 @@ paths:
         "403":
           $ref: "#/components/responses/Forbidden"
 
-  /api/v1/products/{id}:
+  /api/gold/v1/products/{id}:
     parameters:
       - $ref: "#/components/parameters/ID"
     get:
@@ -851,7 +851,7 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
-  /api/v1/customers:
+  /api/gold/v1/customers:
     get:
       tags: [Customers]
       summary: List customers
@@ -896,7 +896,7 @@ paths:
         "400":
           $ref: "#/components/responses/BadRequest"
 
-  /api/v1/customers/rfid/{rfid}:
+  /api/gold/v1/customers/rfid/{rfid}:
     parameters:
       - name: rfid
         in: path
@@ -916,7 +916,7 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
-  /api/v1/customers/{id}:
+  /api/gold/v1/customers/{id}:
     parameters:
       - $ref: "#/components/parameters/ID"
     get:
@@ -960,7 +960,7 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
-  /api/v1/inventory/transfers:
+  /api/gold/v1/inventory/transfers:
     get:
       tags: [Inventory]
       summary: List inventory transfers
@@ -996,7 +996,7 @@ paths:
         "400":
           $ref: "#/components/responses/BadRequest"
 
-  /api/v1/inventory/transfers/{id}:
+  /api/gold/v1/inventory/transfers/{id}:
     parameters:
       - $ref: "#/components/parameters/ID"
     get:
@@ -1012,7 +1012,7 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
-  /api/v1/inventory/transfers/{id}/approve:
+  /api/gold/v1/inventory/transfers/{id}/approve:
     parameters:
       - $ref: "#/components/parameters/ID"
     post:
@@ -1026,7 +1026,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/InventoryTransferResponse"
 
-  /api/v1/inventory/transfers/{id}/receive:
+  /api/gold/v1/inventory/transfers/{id}/receive:
     parameters:
       - $ref: "#/components/parameters/ID"
     post:
@@ -1040,7 +1040,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/InventoryTransferResponse"
 
-  /api/v1/inventory/transfers/{id}/cancel:
+  /api/gold/v1/inventory/transfers/{id}/cancel:
     parameters:
       - $ref: "#/components/parameters/ID"
     post:
@@ -1054,7 +1054,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/InventoryTransferResponse"
 
-  /api/v1/rewards:
+  /api/gold/v1/rewards:
     get:
       tags: [Rewards]
       summary: List available rewards
@@ -1084,7 +1084,7 @@ paths:
         "403":
           $ref: "#/components/responses/Forbidden"
 
-  /api/v1/rewards/redeem:
+  /api/gold/v1/rewards/redeem:
     post:
       tags: [Rewards]
       summary: Redeem a reward using loyalty points
@@ -1104,7 +1104,7 @@ paths:
         "400":
           $ref: "#/components/responses/BadRequest"
 
-  /api/v1/expenses:
+  /api/gold/v1/expenses:
     get:
       tags: [Expenses]
       summary: List expenses
@@ -1145,7 +1145,7 @@ paths:
         "400":
           $ref: "#/components/responses/BadRequest"
 
-  /api/v1/expenses/categories:
+  /api/gold/v1/expenses/categories:
     get:
       tags: [Expenses]
       summary: List expense categories
@@ -1175,7 +1175,7 @@ paths:
         "403":
           $ref: "#/components/responses/Forbidden"
 
-  /api/v1/reports/dashboard:
+  /api/gold/v1/reports/dashboard:
     get:
       tags: [Reports]
       summary: Dashboard summary data
@@ -1192,7 +1192,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/GenericDataResponse"
 
-  /api/v1/reports/profit-loss:
+  /api/gold/v1/reports/profit-loss:
     get:
       tags: [Reports]
       summary: Profit and loss report
@@ -1219,7 +1219,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/GenericDataResponse"
 
-  /api/v1/reports/multi-branch:
+  /api/gold/v1/reports/multi-branch:
     get:
       tags: [Reports]
       summary: Multi-branch profit/loss report — ADMIN
@@ -1244,7 +1244,7 @@ paths:
         "403":
           $ref: "#/components/responses/Forbidden"
 
-  /api/v1/reports/top-products:
+  /api/gold/v1/reports/top-products:
     get:
       tags: [Reports]
       summary: Top selling products
@@ -1266,7 +1266,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/GenericDataResponse"
 
-  /api/v1/reports/employee-performance:
+  /api/gold/v1/reports/employee-performance:
     get:
       tags: [Reports]
       summary: Employee sales performance
@@ -1293,7 +1293,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/GenericDataResponse"
 
-  /api/v1/reports/trends:
+  /api/gold/v1/reports/trends:
     get:
       tags: [Reports]
       summary: Sales trends over time

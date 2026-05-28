@@ -79,7 +79,7 @@ GOLD_API_URL=https://api.chnwt.dev/thai-gold-api/latest
 
 ## 🔐 Authentication
 
-All `/api/v1` endpoints require a valid JWT Bearer token.
+All `/api/gold/v1` endpoints require a valid JWT Bearer token.
 
 **Flow:**
 1. Client authenticates against the external **`um-api`** service and receives a JWT.
@@ -110,7 +110,7 @@ Or use the [Swagger Editor](https://editor.swagger.io/) — paste the contents o
 
 ## 🛣️ API Endpoints
 
-All endpoints are prefixed with `/api/v1` and require `Authorization: Bearer <token>`.
+All endpoints are prefixed with `/api/gold/v1` and require `Authorization: Bearer <token>`. In production the service is fronted by the `devper-api` Firebase gateway (`https://devper-api.web.app/api/gold/v1/...`).
 
 ### 🏢 Branches
 | Method | Path | Role | Description |
