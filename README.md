@@ -110,7 +110,7 @@ Or use the [Swagger Editor](https://editor.swagger.io/) — paste the contents o
 
 ## 🛣️ API Endpoints
 
-All endpoints are prefixed with `/api/gold/v1` and require `Authorization: Bearer <token>`. In production the service is fronted by the `devper-api` Firebase gateway (`https://devper-api.web.app/api/gold/v1/...`).
+All endpoints are prefixed with `/api/gold/v1` and require `Authorization: Bearer <token>`. In production the service is fronted by the `devper-api` Firebase gateway (`https://api.devper.app/api/gold/v1/...`).
 
 ### 🏢 Branches
 | Method | Path | Role | Description |
