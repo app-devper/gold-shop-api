@@ -21,8 +21,9 @@ type Config struct {
 }
 
 type ServerConfig struct {
-	Port string
-	Env  string
+	Port         string
+	Env          string
+	GatewayHosts string
 }
 
 type MongoDBConfig struct {
@@ -69,8 +70,9 @@ func Load() (*Config, error) {
 
 	return &Config{
 		Server: ServerConfig{
-			Port: getEnv("SERVER_PORT", "8080"),
-			Env:  env,
+			Port:         getEnv("SERVER_PORT", "8080"),
+			Env:          env,
+			GatewayHosts: getEnv("GATEWAY_HOSTS", ""),
 		},
 		MongoDB: MongoDBConfig{
 			URI:      getEnv("MONGODB_URI", "mongodb://localhost:27017"),

@@ -125,7 +125,7 @@ func (a App) StartApp() {
 	if err := r.SetTrustedProxies(nil); err != nil {
 		logrus.Error(err)
 	}
-	router.Setup(r, cfg.Auth.SecretKey, sessionRepo, employeeRepo, branchRepo, handlers)
+	router.Setup(r, cfg.Auth.SecretKey, cfg.Server.GatewayHosts, sessionRepo, employeeRepo, branchRepo, handlers)
 
 	// Start server
 	srv := &http.Server{Addr: ":" + cfg.Server.Port, Handler: r}
