@@ -349,19 +349,65 @@ func (s *Service) Create(ctx context.Context, input CreateSaleInput) (*entity.Sa
 	return sale, nil
 }
 
-// GetByID retrieves a sale by ID
 func (s *Service) GetByID(ctx context.Context, id primitive.ObjectID) (*entity.Sale, error) {
-	return s.saleRepo.GetByID(ctx, id)
+	sale, err := s.saleRepo.GetByID(ctx, id)
+	if err != nil || sale == nil {
+		return sale, err
+	}
+	enriched, err := s.withCustomerNames(ctx, []*entity.Sale{sale})
+	if err != nil {
+		return nil, err
+	}
+	return enriched[0], nil
 }
 
-// GetByBranchID retrieves sales by branch ID
 func (s *Service) GetByBranchID(ctx context.Context, branchID primitive.ObjectID, status []entity.SaleStatus, limit, offset int) ([]*entity.Sale, error) {
-	return s.saleRepo.GetByBranchID(ctx, branchID, status, limit, offset)
+	sales, err := s.saleRepo.GetByBranchID(ctx, branchID, status, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+	return s.withCustomerNames(ctx, sales)
 }
 
-// GetUnpaidSales retrieves sales that are not fully paid
 func (s *Service) GetUnpaidSales(ctx context.Context, branchID primitive.ObjectID) ([]*entity.Sale, error) {
-	return s.saleRepo.GetUnpaidByBranchID(ctx, branchID)
+	sales, err := s.saleRepo.GetUnpaidByBranchID(ctx, branchID)
+	if err != nil {
+		return nil, err
+	}
+	return s.withCustomerNames(ctx, sales)
+}
+
+func (s *Service) withCustomerNames(ctx context.Context, sales []*entity.Sale) ([]*entity.Sale, error) {
+	ids := uniqueSaleCustomerIDs(sales)
+	if len(ids) == 0 {
+		return sales, nil
+	}
+	names, err := s.customerRepo.GetNamesByIDs(ctx, ids)
+	if err != nil {
+		return nil, err
+	}
+	enriched := make([]*entity.Sale, len(sales))
+	for i, sale := range sales {
+		withName := *sale
+		if sale.CustomerID != nil {
+			withName.CustomerName = names[*sale.CustomerID]
+		}
+		enriched[i] = &withName
+	}
+	return enriched, nil
+}
+
+func uniqueSaleCustomerIDs(sales []*entity.Sale) []primitive.ObjectID {
+	seen := make(map[primitive.ObjectID]bool, len(sales))
+	ids := make([]primitive.ObjectID, 0, len(sales))
+	for _, sale := range sales {
+		if sale.CustomerID == nil || sale.CustomerID.IsZero() || seen[*sale.CustomerID] {
+			continue
+		}
+		seen[*sale.CustomerID] = true
+		ids = append(ids, *sale.CustomerID)
+	}
+	return ids
 }
 
 // Cancel cancels a sale

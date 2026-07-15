@@ -51,6 +51,7 @@ type Pawn struct {
 	BranchID         primitive.ObjectID `json:"branch_id" bson:"branch_id"`
 	PawnNumber       string             `json:"pawn_number" bson:"pawn_number"`
 	CustomerID       primitive.ObjectID `json:"customer_id" bson:"customer_id"`
+	CustomerName     string             `json:"customer_name,omitempty" bson:"-"`
 	UserID           primitive.ObjectID `json:"user_id" bson:"user_id"`
 	Items            []PawnItem         `json:"items" bson:"items"`
 	Principal        float64            `json:"principal" bson:"principal"`         // เงินต้น

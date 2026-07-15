@@ -54,6 +54,7 @@ type CustomerRepository interface {
 	GetByRFID(ctx context.Context, rfidCard string) (*entity.Customer, error)
 	GetByPhone(ctx context.Context, phone string) (*entity.Customer, error)
 	GetAll(ctx context.Context, limit, offset int) ([]*entity.Customer, error)
+	GetNamesByIDs(ctx context.Context, ids []primitive.ObjectID) (map[primitive.ObjectID]string, error)
 	Search(ctx context.Context, query string, limit int) ([]*entity.Customer, error)
 	Update(ctx context.Context, customer *entity.Customer) error
 	Delete(ctx context.Context, id primitive.ObjectID) error
@@ -150,6 +151,7 @@ type PawnRepository interface {
 	GetByID(ctx context.Context, id primitive.ObjectID) (*entity.Pawn, error)
 	GetByPawnNumber(ctx context.Context, pawnNumber string) (*entity.Pawn, error)
 	GetByBranchID(ctx context.Context, branchID primitive.ObjectID, status []entity.PawnStatus, limit, offset int) ([]*entity.Pawn, error)
+	Search(ctx context.Context, branchID primitive.ObjectID, query string, customerIDs []primitive.ObjectID, limit int) ([]*entity.Pawn, error)
 	GetByCustomerID(ctx context.Context, customerID primitive.ObjectID) ([]*entity.Pawn, error)
 	GetDueSoon(ctx context.Context, branchID primitive.ObjectID, days int) ([]*entity.Pawn, error)
 	GetOverdue(ctx context.Context, branchID primitive.ObjectID) ([]*entity.Pawn, error)
@@ -166,6 +168,7 @@ type GoldSavingRepository interface {
 	GetByAccountNumber(ctx context.Context, accountNumber string) (*entity.GoldSaving, error)
 	GetByCustomerID(ctx context.Context, customerID primitive.ObjectID) ([]*entity.GoldSaving, error)
 	GetByBranchID(ctx context.Context, branchID primitive.ObjectID, status []entity.GoldSavingStatus) ([]*entity.GoldSaving, error)
+	Search(ctx context.Context, branchID primitive.ObjectID, query string, customerIDs []primitive.ObjectID, limit int) ([]*entity.GoldSaving, error)
 	Update(ctx context.Context, goldSaving *entity.GoldSaving) error
 	GenerateAccountNumber(ctx context.Context, branchCode string) (string, error)
 	SumBalanceByBranch(ctx context.Context, branchID primitive.ObjectID) (float64, error)

@@ -3,6 +3,7 @@ package mongo
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"time"
 
 	"github.com/devper-gold/gold-shop-api/app/domain/entity"
@@ -112,6 +113,34 @@ func (r *GoldSavingRepository) GetByBranchID(ctx context.Context, branchID primi
 	}
 
 	cursor, err := coll.Find(ctx, filter)
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	var accounts []*entity.GoldSaving
+	if err := cursor.All(ctx, &accounts); err != nil {
+		return nil, err
+	}
+	return accounts, nil
+}
+
+func (r *GoldSavingRepository) Search(ctx context.Context, branchID primitive.ObjectID, query string, customerIDs []primitive.ObjectID, limit int) ([]*entity.GoldSaving, error) {
+	coll, err := r.coll(ctx)
+	if err != nil {
+		return nil, err
+	}
+	matchers := []bson.M{{"account_number": bson.M{"$regex": regexp.QuoteMeta(query), "$options": "i"}}}
+	if len(customerIDs) > 0 {
+		matchers = append(matchers, bson.M{"customer_id": bson.M{"$in": customerIDs}})
+	}
+	filter := bson.M{"branch_id": branchID, "$or": matchers}
+
+	opts := options.Find().
+		SetLimit(int64(limit)).
+		SetSort(bson.D{{Key: "created_at", Value: -1}})
+
+	cursor, err := coll.Find(ctx, filter, opts)
 	if err != nil {
 		return nil, err
 	}

@@ -94,7 +94,7 @@ func (a App) StartApp() {
 	branchService := branch.NewService(branchRepo)
 	txManager := mongo.NewTransactionManager(mongoClient)
 	saleService := sale.NewService(saleRepo, productRepo, productItemRepo, goldPriceRepo, stockLogRepo, customerRepo, branchRepo, nil, txManager)
-	pawnService := pawn.NewService(pawnRepo, branchRepo)
+	pawnService := pawn.NewService(pawnRepo, branchRepo, customerRepo)
 	goldPriceService := gold_price_app.NewService(goldPriceRepo, goldAPIClient)
 	goldSavingService := gold_saving.NewService(goldSavingRepo, goldPriceRepo, branchRepo, customerRepo)
 	productService := product.NewService(productRepo, productItemRepo, stockLogRepo, branchRepo)

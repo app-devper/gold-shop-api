@@ -3,6 +3,7 @@ package mongo
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"time"
 
 	"github.com/devper-gold/gold-shop-api/app/domain/entity"
@@ -99,6 +100,34 @@ func (r *PawnRepository) GetByBranchID(ctx context.Context, branchID primitive.O
 	opts := options.Find().
 		SetLimit(int64(limit)).
 		SetSkip(int64(offset)).
+		SetSort(bson.D{{Key: "created_at", Value: -1}})
+
+	cursor, err := coll.Find(ctx, filter, opts)
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	var pawns []*entity.Pawn
+	if err := cursor.All(ctx, &pawns); err != nil {
+		return nil, err
+	}
+	return pawns, nil
+}
+
+func (r *PawnRepository) Search(ctx context.Context, branchID primitive.ObjectID, query string, customerIDs []primitive.ObjectID, limit int) ([]*entity.Pawn, error) {
+	coll, err := r.coll(ctx)
+	if err != nil {
+		return nil, err
+	}
+	matchers := []bson.M{{"pawn_number": bson.M{"$regex": regexp.QuoteMeta(query), "$options": "i"}}}
+	if len(customerIDs) > 0 {
+		matchers = append(matchers, bson.M{"customer_id": bson.M{"$in": customerIDs}})
+	}
+	filter := bson.M{"branch_id": branchID, "$or": matchers}
+
+	opts := options.Find().
+		SetLimit(int64(limit)).
 		SetSort(bson.D{{Key: "created_at", Value: -1}})
 
 	cursor, err := coll.Find(ctx, filter, opts)

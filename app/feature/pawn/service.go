@@ -10,17 +10,17 @@ import (
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
-// Service handles pawn logic
 type Service struct {
-	pawnRepo   repository.PawnRepository
-	branchRepo repository.BranchRepository
+	pawnRepo     repository.PawnRepository
+	branchRepo   repository.BranchRepository
+	customerRepo repository.CustomerRepository
 }
 
-// NewService creates a new Pawn service
-func NewService(pawnRepo repository.PawnRepository, branchRepo repository.BranchRepository) *Service {
+func NewService(pawnRepo repository.PawnRepository, branchRepo repository.BranchRepository, customerRepo repository.CustomerRepository) *Service {
 	return &Service{
-		pawnRepo:   pawnRepo,
-		branchRepo: branchRepo,
+		pawnRepo:     pawnRepo,
+		branchRepo:   branchRepo,
+		customerRepo: customerRepo,
 	}
 }
 
@@ -91,19 +91,79 @@ func (s *Service) Create(ctx context.Context, input CreatePawnInput) (*entity.Pa
 	return pawn, nil
 }
 
-// GetByID retrieves a pawn by ID
 func (s *Service) GetByID(ctx context.Context, id primitive.ObjectID) (*entity.Pawn, error) {
-	return s.pawnRepo.GetByID(ctx, id)
+	pawn, err := s.pawnRepo.GetByID(ctx, id)
+	if err != nil || pawn == nil {
+		return pawn, err
+	}
+	enriched, err := s.withCustomerNames(ctx, []*entity.Pawn{pawn})
+	if err != nil {
+		return nil, err
+	}
+	return enriched[0], nil
 }
 
-// GetByBranchID retrieves pawns by branch ID
 func (s *Service) GetByBranchID(ctx context.Context, branchID primitive.ObjectID, status []entity.PawnStatus, limit, offset int) ([]*entity.Pawn, error) {
-	return s.pawnRepo.GetByBranchID(ctx, branchID, status, limit, offset)
+	pawns, err := s.pawnRepo.GetByBranchID(ctx, branchID, status, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+	return s.withCustomerNames(ctx, pawns)
 }
 
-// GetDueSoon retrieves pawns due soon
 func (s *Service) GetDueSoon(ctx context.Context, branchID primitive.ObjectID, days int) ([]*entity.Pawn, error) {
-	return s.pawnRepo.GetDueSoon(ctx, branchID, days)
+	pawns, err := s.pawnRepo.GetDueSoon(ctx, branchID, days)
+	if err != nil {
+		return nil, err
+	}
+	return s.withCustomerNames(ctx, pawns)
+}
+
+func (s *Service) Search(ctx context.Context, branchID primitive.ObjectID, query string, limit int) ([]*entity.Pawn, error) {
+	matchingCustomers, err := s.customerRepo.Search(ctx, query, limit)
+	if err != nil {
+		return nil, err
+	}
+	customerIDs := make([]primitive.ObjectID, 0, len(matchingCustomers))
+	for _, c := range matchingCustomers {
+		customerIDs = append(customerIDs, c.ID)
+	}
+	pawns, err := s.pawnRepo.Search(ctx, branchID, query, customerIDs, limit)
+	if err != nil {
+		return nil, err
+	}
+	return s.withCustomerNames(ctx, pawns)
+}
+
+func (s *Service) withCustomerNames(ctx context.Context, pawns []*entity.Pawn) ([]*entity.Pawn, error) {
+	ids := uniqueCustomerIDs(pawns)
+	if len(ids) == 0 {
+		return pawns, nil
+	}
+	names, err := s.customerRepo.GetNamesByIDs(ctx, ids)
+	if err != nil {
+		return nil, err
+	}
+	enriched := make([]*entity.Pawn, len(pawns))
+	for i, p := range pawns {
+		withName := *p
+		withName.CustomerName = names[p.CustomerID]
+		enriched[i] = &withName
+	}
+	return enriched, nil
+}
+
+func uniqueCustomerIDs(pawns []*entity.Pawn) []primitive.ObjectID {
+	seen := make(map[primitive.ObjectID]bool, len(pawns))
+	ids := make([]primitive.ObjectID, 0, len(pawns))
+	for _, p := range pawns {
+		if p.CustomerID.IsZero() || seen[p.CustomerID] {
+			continue
+		}
+		seen[p.CustomerID] = true
+		ids = append(ids, p.CustomerID)
+	}
+	return ids
 }
 
 // PayInterest pays interest on a pawn
