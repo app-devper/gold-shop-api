@@ -248,3 +248,72 @@ func TestClose_RequiresZeroBalance(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, entity.GoldSavingStatusClosed, got.Status)
 }
+
+func TestGetByBranchIDAttachesCustomerNames(t *testing.T) {
+	ctx := context.Background()
+	branchID := primitive.NewObjectID()
+	customerID := primitive.NewObjectID()
+
+	savingRepo := new(testutils.MockGoldSavingRepository)
+	customerRepo := new(testutils.MockCustomerRepository)
+	s := NewService(savingRepo, nil, nil, customerRepo)
+
+	accounts := []*entity.GoldSaving{{ID: primitive.NewObjectID(), CustomerID: customerID}}
+	savingRepo.On("GetByBranchID", ctx, branchID, []entity.GoldSavingStatus(nil)).Return(accounts, nil)
+	customerRepo.On("GetNamesByIDs", ctx, []primitive.ObjectID{customerID}).Return(map[primitive.ObjectID]string{
+		customerID: "สมชาย ใจดี",
+	}, nil)
+
+	result, err := s.GetByBranchID(ctx, branchID, nil)
+
+	assert.NoError(t, err)
+	assert.Equal(t, "สมชาย ใจดี", result[0].CustomerName)
+	customerRepo.AssertExpectations(t)
+}
+
+func TestGetByIDAttachesCustomerName(t *testing.T) {
+	ctx := context.Background()
+	accountID := primitive.NewObjectID()
+	customerID := primitive.NewObjectID()
+
+	savingRepo := new(testutils.MockGoldSavingRepository)
+	customerRepo := new(testutils.MockCustomerRepository)
+	s := NewService(savingRepo, nil, nil, customerRepo)
+
+	savingRepo.On("GetByID", ctx, accountID).Return(&entity.GoldSaving{ID: accountID, CustomerID: customerID}, nil)
+	customerRepo.On("GetNamesByIDs", ctx, []primitive.ObjectID{customerID}).Return(map[primitive.ObjectID]string{
+		customerID: "สมปอง มั่งมี",
+	}, nil)
+
+	result, err := s.GetByID(ctx, accountID)
+
+	assert.NoError(t, err)
+	assert.Equal(t, "สมปอง มั่งมี", result.CustomerName)
+}
+
+func TestSearchMatchesAccountNumberAndCustomerName(t *testing.T) {
+	ctx := context.Background()
+	branchID := primitive.NewObjectID()
+	customerID := primitive.NewObjectID()
+
+	savingRepo := new(testutils.MockGoldSavingRepository)
+	customerRepo := new(testutils.MockCustomerRepository)
+	s := NewService(savingRepo, nil, nil, customerRepo)
+
+	customerRepo.On("Search", ctx, "สมชาย", 5).Return([]*entity.Customer{
+		{ID: customerID, FullName: "สมชาย ใจดี"},
+	}, nil)
+	accounts := []*entity.GoldSaving{{ID: primitive.NewObjectID(), CustomerID: customerID}}
+	savingRepo.On("Search", ctx, branchID, "สมชาย", []primitive.ObjectID{customerID}, 5).Return(accounts, nil)
+	customerRepo.On("GetNamesByIDs", ctx, []primitive.ObjectID{customerID}).Return(map[primitive.ObjectID]string{
+		customerID: "สมชาย ใจดี",
+	}, nil)
+
+	result, err := s.Search(ctx, branchID, "สมชาย", 5)
+
+	assert.NoError(t, err)
+	assert.Len(t, result, 1)
+	assert.Equal(t, "สมชาย ใจดี", result[0].CustomerName)
+	savingRepo.AssertExpectations(t)
+	customerRepo.AssertExpectations(t)
+}

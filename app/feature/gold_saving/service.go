@@ -72,14 +72,71 @@ func (s *Service) Open(ctx context.Context, in OpenInput) (*entity.GoldSaving, e
 	return account, nil
 }
 
-// GetByID retrieves an account.
 func (s *Service) GetByID(ctx context.Context, id primitive.ObjectID) (*entity.GoldSaving, error) {
-	return s.goldSavingRepo.GetByID(ctx, id)
+	account, err := s.goldSavingRepo.GetByID(ctx, id)
+	if err != nil || account == nil {
+		return account, err
+	}
+	enriched, err := s.withCustomerNames(ctx, []*entity.GoldSaving{account})
+	if err != nil {
+		return nil, err
+	}
+	return enriched[0], nil
 }
 
-// GetByBranchID lists accounts in a branch optionally filtered by status.
 func (s *Service) GetByBranchID(ctx context.Context, branchID primitive.ObjectID, status []entity.GoldSavingStatus) ([]*entity.GoldSaving, error) {
-	return s.goldSavingRepo.GetByBranchID(ctx, branchID, status)
+	accounts, err := s.goldSavingRepo.GetByBranchID(ctx, branchID, status)
+	if err != nil {
+		return nil, err
+	}
+	return s.withCustomerNames(ctx, accounts)
+}
+
+func (s *Service) Search(ctx context.Context, branchID primitive.ObjectID, query string, limit int) ([]*entity.GoldSaving, error) {
+	matchingCustomers, err := s.customerRepo.Search(ctx, query, limit)
+	if err != nil {
+		return nil, err
+	}
+	customerIDs := make([]primitive.ObjectID, 0, len(matchingCustomers))
+	for _, c := range matchingCustomers {
+		customerIDs = append(customerIDs, c.ID)
+	}
+	accounts, err := s.goldSavingRepo.Search(ctx, branchID, query, customerIDs, limit)
+	if err != nil {
+		return nil, err
+	}
+	return s.withCustomerNames(ctx, accounts)
+}
+
+func (s *Service) withCustomerNames(ctx context.Context, accounts []*entity.GoldSaving) ([]*entity.GoldSaving, error) {
+	ids := uniqueAccountCustomerIDs(accounts)
+	if len(ids) == 0 {
+		return accounts, nil
+	}
+	names, err := s.customerRepo.GetNamesByIDs(ctx, ids)
+	if err != nil {
+		return nil, err
+	}
+	enriched := make([]*entity.GoldSaving, len(accounts))
+	for i, account := range accounts {
+		withName := *account
+		withName.CustomerName = names[account.CustomerID]
+		enriched[i] = &withName
+	}
+	return enriched, nil
+}
+
+func uniqueAccountCustomerIDs(accounts []*entity.GoldSaving) []primitive.ObjectID {
+	seen := make(map[primitive.ObjectID]bool, len(accounts))
+	ids := make([]primitive.ObjectID, 0, len(accounts))
+	for _, account := range accounts {
+		if account.CustomerID.IsZero() || seen[account.CustomerID] {
+			continue
+		}
+		seen[account.CustomerID] = true
+		ids = append(ids, account.CustomerID)
+	}
+	return ids
 }
 
 // DepositCash converts a baht amount into gold weight at the current sell price.
@@ -198,15 +255,15 @@ func (s *Service) Close(ctx context.Context, accountID primitive.ObjectID) (*ent
 
 // Statement is the mark-to-market view for the customer.
 type Statement struct {
-	Account             *entity.GoldSaving `json:"account"`
-	GoldWeight          float64            `json:"gold_weight"`            // grams
-	CurrentBuyPrice     float64            `json:"current_buy_price"`      // ฿ per baht (display)
-	CurrentBuyPerGram   float64            `json:"current_buy_per_gram"`   // ฿ per gram
-	CurrentSellPerGram  float64            `json:"current_sell_per_gram"`  // ฿ per gram (for forward planning)
-	CurrentValue        float64            `json:"current_value"`          // ฿
-	CostBasisValue      float64            `json:"cost_basis_value"`       // ฿
-	UnrealizedPnL       float64            `json:"unrealized_pnl"`         // ฿
-	UnrealizedPnLPercent float64           `json:"unrealized_pnl_percent"` // %
+	Account              *entity.GoldSaving `json:"account"`
+	GoldWeight           float64            `json:"gold_weight"`            // grams
+	CurrentBuyPrice      float64            `json:"current_buy_price"`      // ฿ per baht (display)
+	CurrentBuyPerGram    float64            `json:"current_buy_per_gram"`   // ฿ per gram
+	CurrentSellPerGram   float64            `json:"current_sell_per_gram"`  // ฿ per gram (for forward planning)
+	CurrentValue         float64            `json:"current_value"`          // ฿
+	CostBasisValue       float64            `json:"cost_basis_value"`       // ฿
+	UnrealizedPnL        float64            `json:"unrealized_pnl"`         // ฿
+	UnrealizedPnLPercent float64            `json:"unrealized_pnl_percent"` // %
 }
 
 // GetStatement assembles the customer-facing statement.

@@ -192,6 +192,14 @@ func (m *MockCustomerRepository) GetAll(ctx context.Context, limit, offset int) 
 	return args.Get(0).([]*entity.Customer), args.Error(1)
 }
 
+func (m *MockCustomerRepository) GetNamesByIDs(ctx context.Context, ids []primitive.ObjectID) (map[primitive.ObjectID]string, error) {
+	args := m.Called(ctx, ids)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(map[primitive.ObjectID]string), args.Error(1)
+}
+
 func (m *MockCustomerRepository) Search(ctx context.Context, query string, limit int) ([]*entity.Customer, error) {
 	args := m.Called(ctx, query, limit)
 	return args.Get(0).([]*entity.Customer), args.Error(1)
@@ -327,6 +335,14 @@ func (m *MockPawnRepository) GetByBranchID(ctx context.Context, branchID primiti
 	return args.Get(0).([]*entity.Pawn), args.Error(1)
 }
 
+func (m *MockPawnRepository) Search(ctx context.Context, branchID primitive.ObjectID, query string, customerIDs []primitive.ObjectID, limit int) ([]*entity.Pawn, error) {
+	args := m.Called(ctx, branchID, query, customerIDs, limit)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]*entity.Pawn), args.Error(1)
+}
+
 func (m *MockPawnRepository) GetByCustomerID(ctx context.Context, customerID primitive.ObjectID) ([]*entity.Pawn, error) {
 	args := m.Called(ctx, customerID)
 	return args.Get(0).([]*entity.Pawn), args.Error(1)
@@ -394,6 +410,14 @@ func (m *MockGoldSavingRepository) GetByCustomerID(ctx context.Context, customer
 
 func (m *MockGoldSavingRepository) GetByBranchID(ctx context.Context, branchID primitive.ObjectID, status []entity.GoldSavingStatus) ([]*entity.GoldSaving, error) {
 	args := m.Called(ctx, branchID, status)
+	return args.Get(0).([]*entity.GoldSaving), args.Error(1)
+}
+
+func (m *MockGoldSavingRepository) Search(ctx context.Context, branchID primitive.ObjectID, query string, customerIDs []primitive.ObjectID, limit int) ([]*entity.GoldSaving, error) {
+	args := m.Called(ctx, branchID, query, customerIDs, limit)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
 	return args.Get(0).([]*entity.GoldSaving), args.Error(1)
 }
 

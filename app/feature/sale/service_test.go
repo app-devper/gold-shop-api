@@ -189,3 +189,88 @@ func TestGenerateReceipt(t *testing.T) {
 	assert.Equal(t, "Main", receipt.BranchName)
 	assert.Equal(t, "John", receipt.CashierName)
 }
+
+func TestGetByBranchIDAttachesCustomerNames(t *testing.T) {
+	ctx := context.Background()
+	branchID := primitive.NewObjectID()
+	customerID := primitive.NewObjectID()
+
+	mockSaleRepo := new(testutils.MockSaleRepository)
+	mockCustomerRepo := new(testutils.MockCustomerRepository)
+	service := NewService(mockSaleRepo, nil, nil, nil, nil, mockCustomerRepo, nil, nil, nil)
+
+	sales := []*entity.Sale{
+		{ID: primitive.NewObjectID(), CustomerID: &customerID},
+		{ID: primitive.NewObjectID()},
+	}
+	mockSaleRepo.On("GetByBranchID", ctx, branchID, []entity.SaleStatus(nil), 20, 0).Return(sales, nil)
+	mockCustomerRepo.On("GetNamesByIDs", ctx, []primitive.ObjectID{customerID}).Return(map[primitive.ObjectID]string{
+		customerID: "สมชาย ใจดี",
+	}, nil)
+
+	result, err := service.GetByBranchID(ctx, branchID, nil, 20, 0)
+
+	assert.NoError(t, err)
+	assert.Equal(t, "สมชาย ใจดี", result[0].CustomerName)
+	assert.Equal(t, "", result[1].CustomerName)
+	mockCustomerRepo.AssertExpectations(t)
+}
+
+func TestGetByBranchIDSkipsLookupWhenNoCustomers(t *testing.T) {
+	ctx := context.Background()
+	branchID := primitive.NewObjectID()
+
+	mockSaleRepo := new(testutils.MockSaleRepository)
+	mockCustomerRepo := new(testutils.MockCustomerRepository)
+	service := NewService(mockSaleRepo, nil, nil, nil, nil, mockCustomerRepo, nil, nil, nil)
+
+	sales := []*entity.Sale{{ID: primitive.NewObjectID()}}
+	mockSaleRepo.On("GetByBranchID", ctx, branchID, []entity.SaleStatus(nil), 20, 0).Return(sales, nil)
+
+	result, err := service.GetByBranchID(ctx, branchID, nil, 20, 0)
+
+	assert.NoError(t, err)
+	assert.Equal(t, "", result[0].CustomerName)
+	mockCustomerRepo.AssertNotCalled(t, "GetNamesByIDs")
+}
+
+func TestGetUnpaidSalesAttachesCustomerNames(t *testing.T) {
+	ctx := context.Background()
+	branchID := primitive.NewObjectID()
+	customerID := primitive.NewObjectID()
+
+	mockSaleRepo := new(testutils.MockSaleRepository)
+	mockCustomerRepo := new(testutils.MockCustomerRepository)
+	service := NewService(mockSaleRepo, nil, nil, nil, nil, mockCustomerRepo, nil, nil, nil)
+
+	sales := []*entity.Sale{{ID: primitive.NewObjectID(), CustomerID: &customerID}}
+	mockSaleRepo.On("GetUnpaidByBranchID", ctx, branchID).Return(sales, nil)
+	mockCustomerRepo.On("GetNamesByIDs", ctx, []primitive.ObjectID{customerID}).Return(map[primitive.ObjectID]string{
+		customerID: "สมหญิง รักทอง",
+	}, nil)
+
+	result, err := service.GetUnpaidSales(ctx, branchID)
+
+	assert.NoError(t, err)
+	assert.Equal(t, "สมหญิง รักทอง", result[0].CustomerName)
+}
+
+func TestGetByIDAttachesCustomerName(t *testing.T) {
+	ctx := context.Background()
+	saleID := primitive.NewObjectID()
+	customerID := primitive.NewObjectID()
+
+	mockSaleRepo := new(testutils.MockSaleRepository)
+	mockCustomerRepo := new(testutils.MockCustomerRepository)
+	service := NewService(mockSaleRepo, nil, nil, nil, nil, mockCustomerRepo, nil, nil, nil)
+
+	mockSaleRepo.On("GetByID", ctx, saleID).Return(&entity.Sale{ID: saleID, CustomerID: &customerID}, nil)
+	mockCustomerRepo.On("GetNamesByIDs", ctx, []primitive.ObjectID{customerID}).Return(map[primitive.ObjectID]string{
+		customerID: "สมศรี ศรีทอง",
+	}, nil)
+
+	result, err := service.GetByID(ctx, saleID)
+
+	assert.NoError(t, err)
+	assert.Equal(t, "สมศรี ศรีทอง", result.CustomerName)
+}

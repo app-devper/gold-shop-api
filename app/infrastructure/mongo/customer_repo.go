@@ -2,6 +2,7 @@ package mongo
 
 import (
 	"context"
+	"regexp"
 	"time"
 
 	"github.com/devper-gold/gold-shop-api/app/domain/entity"
@@ -114,6 +115,32 @@ func (r *CustomerRepository) GetByPhone(ctx context.Context, phone string) (*ent
 	return &customer, nil
 }
 
+func (r *CustomerRepository) GetNamesByIDs(ctx context.Context, ids []primitive.ObjectID) (map[primitive.ObjectID]string, error) {
+	names := make(map[primitive.ObjectID]string, len(ids))
+	if len(ids) == 0 {
+		return names, nil
+	}
+	coll, err := r.coll(ctx)
+	if err != nil {
+		return nil, err
+	}
+	opts := options.Find().SetProjection(bson.M{"full_name": 1})
+	cursor, err := coll.Find(ctx, bson.M{"_id": bson.M{"$in": ids}}, opts)
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	var customers []*entity.Customer
+	if err := cursor.All(ctx, &customers); err != nil {
+		return nil, err
+	}
+	for _, c := range customers {
+		names[c.ID] = c.FullName
+	}
+	return names, nil
+}
+
 // GetAll retrieves all customers with pagination
 func (r *CustomerRepository) GetAll(ctx context.Context, limit, offset int) ([]*entity.Customer, error) {
 	coll, err := r.coll(ctx)
@@ -144,11 +171,12 @@ func (r *CustomerRepository) Search(ctx context.Context, query string, limit int
 	if err != nil {
 		return nil, err
 	}
+	safeQuery := regexp.QuoteMeta(query)
 	filter := bson.M{
 		"$or": []bson.M{
-			{"full_name": bson.M{"$regex": query, "$options": "i"}},
-			{"phone": bson.M{"$regex": query, "$options": "i"}},
-			{"member_code": bson.M{"$regex": query, "$options": "i"}},
+			{"full_name": bson.M{"$regex": safeQuery, "$options": "i"}},
+			{"phone": bson.M{"$regex": safeQuery, "$options": "i"}},
+			{"member_code": bson.M{"$regex": safeQuery, "$options": "i"}},
 		},
 	}
 

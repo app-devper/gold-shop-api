@@ -52,7 +52,6 @@ type RedeemRequest struct {
 	Discount float64 `json:"discount"`
 }
 
-// List returns pawns with filters
 func (h *PawnHandler) List(c *gin.Context) {
 	branchID, _ := primitive.ObjectIDFromHex(c.Query("branch_id"))
 	if branchID.IsZero() {
@@ -61,6 +60,16 @@ func (h *PawnHandler) List(c *gin.Context) {
 
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "20"))
 	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
+
+	if query := c.Query("q"); query != "" {
+		pawns, err := h.pawnService.Search(c.Request.Context(), branchID, query, limit)
+		if err != nil {
+			utils.InternalErrorResponse(c, "PWN-500-004", "Failed to search pawns")
+			return
+		}
+		utils.SuccessResponse(c, pawns)
+		return
+	}
 
 	var status []entity.PawnStatus
 	if s := c.Query("status"); s != "" {
