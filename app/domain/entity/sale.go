@@ -139,6 +139,7 @@ type Sale struct {
 	BranchID           primitive.ObjectID  `json:"branch_id" bson:"branch_id"`
 	SaleNumber         string              `json:"sale_number" bson:"sale_number"`
 	CustomerID         *primitive.ObjectID `json:"customer_id,omitempty" bson:"customer_id,omitempty"`
+	CustomerName       string              `json:"customer_name,omitempty" bson:"-"`
 	UserID             primitive.ObjectID  `json:"user_id" bson:"user_id"`
 	SaleType           SaleType            `json:"sale_type" bson:"sale_type"`
 	GoldPrice          GoldPriceSnapshot   `json:"gold_price" bson:"gold_price"`

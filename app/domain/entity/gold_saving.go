@@ -65,6 +65,7 @@ type GoldSaving struct {
 	AccountNumber string             `json:"account_number" bson:"account_number"`
 	BranchID      primitive.ObjectID `json:"branch_id" bson:"branch_id"`
 	CustomerID    primitive.ObjectID `json:"customer_id" bson:"customer_id"`
+	CustomerName  string             `json:"customer_name,omitempty" bson:"-"`
 
 	// Primary balance — grams of gold held for the customer.
 	GoldWeight float64 `json:"gold_weight" bson:"gold_weight"`

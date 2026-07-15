@@ -1,6 +1,8 @@
 package handler
 
 import (
+	"strconv"
+
 	"github.com/devper-gold/gold-shop-api/app/domain/entity"
 	"github.com/devper-gold/gold-shop-api/app/feature/gold_saving"
 	"github.com/devper-gold/gold-shop-api/pkg/utils"
@@ -44,9 +46,19 @@ type AdjustRequest struct {
 	Note        string  `json:"note" binding:"required"`
 }
 
-// List returns all accounts in the operator's branch (filterable by status).
 func (h *GoldSavingHandler) List(c *gin.Context) {
 	branchID, _ := primitive.ObjectIDFromHex(c.GetString("BranchId"))
+
+	if query := c.Query("q"); query != "" {
+		limit, _ := strconv.Atoi(c.DefaultQuery("limit", "20"))
+		accounts, err := h.goldSavingService.Search(c.Request.Context(), branchID, query, limit)
+		if err != nil {
+			utils.InternalErrorResponse(c, "GLS-500-006", "Failed to search accounts")
+			return
+		}
+		utils.SuccessResponse(c, accounts)
+		return
+	}
 
 	var status []entity.GoldSavingStatus
 	if s := c.Query("status"); s != "" {
