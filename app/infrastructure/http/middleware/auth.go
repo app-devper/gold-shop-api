@@ -2,9 +2,12 @@ package middleware
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"net/http"
 	"strings"
 
+	"github.com/app-devper/um-api/sessionclient"
 	"github.com/devper-gold/gold-shop-api/app/domain/entity"
 	"github.com/devper-gold/gold-shop-api/app/domain/repository"
 	mongoinfra "github.com/devper-gold/gold-shop-api/app/infrastructure/mongo"
@@ -14,9 +17,10 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-// SessionLookup is an interface for looking up sessions
+// SessionLookup confirms the UM session behind a verified token and returns
+// its user id (see redis.SessionRepository).
 type SessionLookup interface {
-	GetSessionById(ctx context.Context, sessionId string) (string, error)
+	Authorize(ctx context.Context, sessionId, system, method string) (string, error)
 }
 
 // AccessClaims represents JWT claims from um-api
@@ -85,8 +89,14 @@ func RequireTenant() gin.HandlerFunc {
 // RequireSession validates the session in Redis and sets UserId in context
 func RequireSession(sessionRepo SessionLookup) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		sessionId := c.GetString("SessionId")
-		userId, err := sessionRepo.GetSessionById(c.Request.Context(), sessionId)
+		userId, err := sessionRepo.Authorize(c.Request.Context(),
+			c.GetString("SessionId"), c.GetString("System"), c.Request.Method)
+		if errors.Is(err, sessionclient.ErrUnavailable) {
+			// Retry later; do not sign the user out.
+			utils.ErrorResponse(c, "AUT-503-001", http.StatusServiceUnavailable, "identity service unavailable")
+			c.Abort()
+			return
+		}
 		if err != nil {
 			utils.UnauthorizedResponse(c, "AUT-401-005", "session invalid")
 			c.Abort()
