@@ -74,7 +74,7 @@ func (a App) StartApp() {
 	// Initialize repositories
 	branchRepo := mongo.NewBranchRepository(mongoClient)
 	employeeRepo := mongo.NewEmployeeRepository(mongoClient)
-	sessionRepo := redisrepo.NewSessionRepository(rdb)
+	sessionRepo := redisrepo.NewSessionRepository(cfg.Redis.Host)
 	customerRepo := mongo.NewCustomerRepository(mongoClient)
 	productRepo := mongo.NewProductRepository(mongoClient)
 	saleRepo := mongo.NewSaleRepository(mongoClient)
