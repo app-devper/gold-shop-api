@@ -6,15 +6,6 @@ import (
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
-// UMRole represents roles from um-api JWT claims
-type UMRole string
-
-const (
-	UMRoleSuper UMRole = "SUPER"
-	UMRoleAdmin UMRole = "ADMIN"
-	UMRoleUser  UMRole = "USER"
-)
-
 // EmployeeRole represents local branch roles
 type EmployeeRole string
 

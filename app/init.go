@@ -24,9 +24,9 @@ import (
 	"github.com/devper-gold/gold-shop-api/app/feature/sale"
 	gold_price_infra "github.com/devper-gold/gold-shop-api/app/infrastructure/external/gold_price"
 	"github.com/devper-gold/gold-shop-api/app/infrastructure/http/handler"
+	"github.com/devper-gold/gold-shop-api/app/infrastructure/http/middleware"
 	"github.com/devper-gold/gold-shop-api/app/infrastructure/http/router"
 	"github.com/devper-gold/gold-shop-api/app/infrastructure/mongo"
-	redisrepo "github.com/devper-gold/gold-shop-api/app/infrastructure/redis"
 	"github.com/gin-gonic/gin"
 	"github.com/go-redis/redis/v8"
 	"github.com/sirupsen/logrus"
@@ -74,7 +74,6 @@ func (a App) StartApp() {
 	// Initialize repositories
 	branchRepo := mongo.NewBranchRepository(mongoClient)
 	employeeRepo := mongo.NewEmployeeRepository(mongoClient)
-	sessionRepo := redisrepo.NewSessionRepository(cfg.Redis.Host)
 	customerRepo := mongo.NewCustomerRepository(mongoClient)
 	productRepo := mongo.NewProductRepository(mongoClient)
 	saleRepo := mongo.NewSaleRepository(mongoClient)
@@ -125,7 +124,11 @@ func (a App) StartApp() {
 	if err := r.SetTrustedProxies(nil); err != nil {
 		logrus.Error(err)
 	}
-	router.Setup(r, cfg.Auth.SecretKey, cfg.Auth.System, cfg.Server.GatewayHosts, sessionRepo, employeeRepo, branchRepo, handlers)
+	auth, err := middleware.NewAuth(cfg.Auth.SecretKey, cfg.Auth.System, cfg.Redis.Host)
+	if err != nil {
+		logrus.Fatalf("UM token verification: %v", err)
+	}
+	router.Setup(r, auth, cfg.Server.GatewayHosts, employeeRepo, branchRepo, handlers)
 
 	// Start server
 	srv := &http.Server{Addr: ":" + cfg.Server.Port, Handler: r}
