@@ -31,8 +31,10 @@ type AccessClaims struct {
 	jwt.RegisteredClaims
 }
 
-// RequireAuthenticated validates the JWT token issued by um-api
-func RequireAuthenticated(secretKey string) gin.HandlerFunc {
+// RequireAuthenticated validates the JWT token issued by um-api and accepts
+// only tokens issued for this service's system, so a live session from
+// another system (for example POS) cannot call gold-shop.
+func RequireAuthenticated(secretKey, system string) gin.HandlerFunc {
 	jwtKey := []byte(secretKey)
 	return func(c *gin.Context) {
 		token := c.GetHeader("Authorization")
@@ -56,6 +58,11 @@ func RequireAuthenticated(secretKey string) gin.HandlerFunc {
 		}
 		if tkn == nil || !tkn.Valid || claims.ID == "" {
 			utils.UnauthorizedResponse(c, "AUT-401-003", "token invalid")
+			c.Abort()
+			return
+		}
+		if claims.System != system {
+			utils.UnauthorizedResponse(c, "AUT-401-006", "system invalid")
 			c.Abort()
 			return
 		}
