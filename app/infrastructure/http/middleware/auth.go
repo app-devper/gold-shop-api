@@ -1,81 +1,45 @@
 package middleware
 
 import (
-	"context"
-	"errors"
-	"fmt"
-	"net/http"
-	"strings"
-
 	"github.com/app-devper/um-api/sessionclient"
+	"github.com/app-devper/um-api/sessionclient/ginauth"
 	"github.com/devper-gold/gold-shop-api/app/domain/entity"
 	"github.com/devper-gold/gold-shop-api/app/domain/repository"
 	mongoinfra "github.com/devper-gold/gold-shop-api/app/infrastructure/mongo"
 	"github.com/devper-gold/gold-shop-api/pkg/utils"
 	"github.com/gin-gonic/gin"
-	"github.com/golang-jwt/jwt/v5"
 	"github.com/sirupsen/logrus"
 )
 
-// SessionLookup confirms the UM session behind a verified token and returns
-// its user id (see redis.SessionRepository).
-type SessionLookup interface {
-	Authorize(ctx context.Context, sessionId, system, method string) (string, error)
-}
-
-// AccessClaims represents JWT claims from um-api
-type AccessClaims struct {
-	Role     string `json:"role"`
-	System   string `json:"system"`
-	ClientId string `json:"clientId"`
-	jwt.RegisteredClaims
-}
-
-// RequireAuthenticated validates the JWT token issued by um-api and accepts
-// only tokens issued for this service's system, so a live session from
-// another system (for example POS) cannot call gold-shop.
-func RequireAuthenticated(secretKey, system string) gin.HandlerFunc {
-	jwtKey := []byte(secretKey)
-	return func(c *gin.Context) {
-		token := c.GetHeader("Authorization")
-		if !strings.HasPrefix(token, "Bearer ") {
-			utils.UnauthorizedResponse(c, "AUT-401-001", "missing authorization header")
-			c.Abort()
-			return
-		}
-		tokenStr := strings.TrimPrefix(token, "Bearer ")
-		claims := &AccessClaims{}
-		tkn, err := jwt.ParseWithClaims(tokenStr, claims, func(token *jwt.Token) (interface{}, error) {
-			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-				return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
-			}
-			return jwtKey, nil
-		})
-		if err != nil {
-			utils.UnauthorizedResponse(c, "AUT-401-002", "token invalid")
-			c.Abort()
-			return
-		}
-		if tkn == nil || !tkn.Valid || claims.ID == "" {
-			utils.UnauthorizedResponse(c, "AUT-401-003", "token invalid")
-			c.Abort()
-			return
-		}
-		if claims.System != system {
-			utils.UnauthorizedResponse(c, "AUT-401-006", "system invalid")
-			c.Abort()
-			return
-		}
-
-		c.Set("SessionId", claims.ID)
-		c.Set("Role", claims.Role)
-		c.Set("System", claims.System)
-		c.Set("ClientId", claims.ClientId)
-
-		logrus.Info("SessionId: " + claims.ID)
-		logrus.Info("Role: " + claims.Role)
-		c.Next()
+// NewAuth verifies UM access tokens for gold-shop: SYSTEM binds the token and
+// the session is confirmed in UM's Redis at redisHost (um-api ADR-0005).
+// gold-shop serves many clients, so the token's client is not pinned. It
+// fails when the secret, system, or Redis host is missing.
+func NewAuth(secretKey, system, redisHost string) (*ginauth.Auth, error) {
+	store, err := sessionclient.RedisStoreFor(redisHost)
+	if err != nil {
+		return nil, err
 	}
+	return NewAuthWithStore(secretKey, system, store)
+}
+
+// NewAuthWithStore is NewAuth with UM's session store supplied, for tests.
+func NewAuthWithStore(secretKey, system string, store sessionclient.Store) (*ginauth.Auth, error) {
+	verifier, err := sessionclient.NewVerifier(sessionclient.Config{SecretKey: secretKey, System: system, Store: store})
+	if err != nil {
+		return nil, err
+	}
+	return ginauth.New(verifier, func(c *gin.Context, e *sessionclient.Error) {
+		utils.ErrorResponse(c, e.Code, e.Status, e.Message)
+		c.Abort()
+	}), nil
+}
+
+// RequireSession admits a caller with a live UM session. Every gold-shop
+// route uses the default outage policy: while UM is unreachable a read may
+// continue with the session last confirmed for its token, and writes wait.
+func RequireSession(auth *ginauth.Auth) gin.HandlerFunc {
+	return auth.Require(sessionclient.ReadOnlyWithLastGood)
 }
 
 func RequireTenant() gin.HandlerFunc {
@@ -89,28 +53,6 @@ func RequireTenant() gin.HandlerFunc {
 		}
 		ctx := mongoinfra.WithClientID(c.Request.Context(), clientID)
 		c.Request = c.Request.WithContext(ctx)
-		c.Next()
-	}
-}
-
-// RequireSession validates the session in Redis and sets UserId in context
-func RequireSession(sessionRepo SessionLookup) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		userId, err := sessionRepo.Authorize(c.Request.Context(),
-			c.GetString("SessionId"), c.GetString("System"), c.Request.Method)
-		if errors.Is(err, sessionclient.ErrUnavailable) {
-			// Retry later; do not sign the user out.
-			utils.ErrorResponse(c, "AUT-503-001", http.StatusServiceUnavailable, "identity service unavailable")
-			c.Abort()
-			return
-		}
-		if err != nil {
-			utils.UnauthorizedResponse(c, "AUT-401-005", "session invalid")
-			c.Abort()
-			return
-		}
-		c.Set("UserId", userId)
-		logrus.Info("UserId: " + userId)
 		c.Next()
 	}
 }
@@ -162,25 +104,6 @@ func RoleMiddleware(allowedRoles ...entity.EmployeeRole) gin.HandlerFunc {
 			}
 		}
 		utils.ForbiddenResponse(c, "AUT-403-003", "Don't have permission")
-		c.Abort()
-	}
-}
-
-func RequireRole(allowedRoles ...entity.UMRole) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		role := c.GetString("Role")
-		if role == "" {
-			utils.ForbiddenResponse(c, "AUT-403-004", "Invalid request, restricted endpoint")
-			c.Abort()
-			return
-		}
-		for _, r := range allowedRoles {
-			if string(r) == role {
-				c.Next()
-				return
-			}
-		}
-		utils.ForbiddenResponse(c, "AUT-403-005", "Don't have um permission")
 		c.Abort()
 	}
 }
