@@ -1,6 +1,8 @@
 package router
 
 import (
+	"github.com/app-devper/um-api/sessionclient"
+	"github.com/app-devper/um-api/sessionclient/ginauth"
 	"github.com/devper-gold/gold-shop-api/app/domain/entity"
 	"github.com/devper-gold/gold-shop-api/app/domain/repository"
 	"github.com/devper-gold/gold-shop-api/app/infrastructure/http/handler"
@@ -25,7 +27,7 @@ type Handlers struct {
 }
 
 // Setup sets up all routes
-func Setup(r *gin.Engine, secretKey, system, gatewayHosts string, sessionRepo middleware.SessionLookup, employeeRepo repository.EmployeeRepository, branchRepo repository.BranchRepository, handlers *Handlers) {
+func Setup(r *gin.Engine, auth *ginauth.Auth, gatewayHosts string, employeeRepo repository.EmployeeRepository, branchRepo repository.BranchRepository, handlers *Handlers) {
 
 	// Middleware
 	r.Use(middleware.GatewayHostMiddleware(gatewayHosts))
@@ -40,12 +42,11 @@ func Setup(r *gin.Engine, secretKey, system, gatewayHosts string, sessionRepo mi
 
 	api := r.Group("/api/gold/v1")
 
-	// Protected routes: RequireAuthenticated → RequireTenant → RequireSession → RequireBranch
+	// Protected routes: RequireSession (UM token + live session) → RequireTenant → RequireBranch
 	protected := api.Group("")
 	protected.Use(
-		middleware.RequireAuthenticated(secretKey, system),
+		middleware.RequireSession(auth),
 		middleware.RequireTenant(),
-		middleware.RequireSession(sessionRepo),
 		middleware.RequireBranch(employeeRepo, branchRepo),
 	)
 	{
@@ -66,9 +67,9 @@ func Setup(r *gin.Engine, secretKey, system, gatewayHosts string, sessionRepo mi
 			employees.GET("/me", handlers.Employee.GetMyEmployee)
 			employees.GET("/branch/:branchId", handlers.Employee.GetEmployeesByBranch)
 			employees.GET("/:id", handlers.Employee.GetEmployee)
-			employees.POST("", middleware.RequireRole(entity.UMRoleSuper, entity.UMRoleAdmin), handlers.Employee.CreateEmployee)
-			employees.PUT("/:id", middleware.RequireRole(entity.UMRoleSuper, entity.UMRoleAdmin), handlers.Employee.UpdateEmployee)
-			employees.DELETE("/:id", middleware.RequireRole(entity.UMRoleSuper, entity.UMRoleAdmin), handlers.Employee.DeleteEmployee)
+			employees.POST("", auth.AtLeast(sessionclient.RoleAdmin), handlers.Employee.CreateEmployee)
+			employees.PUT("/:id", auth.AtLeast(sessionclient.RoleAdmin), handlers.Employee.UpdateEmployee)
+			employees.DELETE("/:id", auth.AtLeast(sessionclient.RoleAdmin), handlers.Employee.DeleteEmployee)
 		}
 
 		// Gold Prices
