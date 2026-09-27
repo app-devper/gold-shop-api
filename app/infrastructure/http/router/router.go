@@ -25,7 +25,7 @@ type Handlers struct {
 }
 
 // Setup sets up all routes
-func Setup(r *gin.Engine, secretKey string, gatewayHosts string, sessionRepo middleware.SessionLookup, employeeRepo repository.EmployeeRepository, branchRepo repository.BranchRepository, handlers *Handlers) {
+func Setup(r *gin.Engine, secretKey, system, gatewayHosts string, sessionRepo middleware.SessionLookup, employeeRepo repository.EmployeeRepository, branchRepo repository.BranchRepository, handlers *Handlers) {
 
 	// Middleware
 	r.Use(middleware.GatewayHostMiddleware(gatewayHosts))
@@ -43,7 +43,7 @@ func Setup(r *gin.Engine, secretKey string, gatewayHosts string, sessionRepo mid
 	// Protected routes: RequireAuthenticated → RequireTenant → RequireSession → RequireBranch
 	protected := api.Group("")
 	protected.Use(
-		middleware.RequireAuthenticated(secretKey),
+		middleware.RequireAuthenticated(secretKey, system),
 		middleware.RequireTenant(),
 		middleware.RequireSession(sessionRepo),
 		middleware.RequireBranch(employeeRepo, branchRepo),
