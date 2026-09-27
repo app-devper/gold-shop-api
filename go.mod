@@ -3,7 +3,7 @@ module github.com/devper-gold/gold-shop-api
 go 1.26.0
 
 require (
-	github.com/app-devper/um-api/sessionclient v0.2.0
+	github.com/app-devper/um-api/sessionclient v0.2.2
 	github.com/gin-contrib/cors v1.7.6
 	github.com/gin-gonic/gin v1.11.0
 	github.com/go-redis/redis/v8 v8.11.5
