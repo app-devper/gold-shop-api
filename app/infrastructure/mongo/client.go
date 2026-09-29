@@ -2,33 +2,23 @@ package mongo
 
 import (
 	"context"
-	"errors"
-	"fmt"
-	"regexp"
-	"sync"
-	"sync/atomic"
 	"time"
 
+	"github.com/app-devper/um-api/servicekit/tenant"
 	"github.com/sirupsen/logrus"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
-var validClientID = regexp.MustCompile(`^[a-zA-Z0-9](?:[a-zA-Z0-9_-]{0,48}[a-zA-Z0-9])?$`)
-
+// Seeder prepares a tenant's database on first use.
 type Seeder func(ctx context.Context, db *mongo.Database) error
 
-type tenantDB struct {
-	db     *mongo.Database
-	seedMu sync.Mutex
-	seeded atomic.Bool
-}
-
+// Client keeps one database per tenant through servicekit/tenant (um-api
+// ADR-0007): <prefix>_<clientId>, seeded on first use and retried later if
+// seeding fails.
 type Client struct {
-	client   *mongo.Client
-	dbPrefix string
-	seeder   Seeder
-	cache    sync.Map
+	client  *mongo.Client
+	tenants *tenant.Registry[*mongo.Database]
 }
 
 func NewClient(uri, dbPrefix string, seeder Seeder) (*Client, error) {
@@ -44,11 +34,18 @@ func NewClient(uri, dbPrefix string, seeder Seeder) (*Client, error) {
 		return nil, err
 	}
 
-	return &Client{
-		client:   client,
-		dbPrefix: dbPrefix,
-		seeder:   seeder,
-	}, nil
+	open := func(name string) *mongo.Database { return client.Database(name) }
+	var initialise func(context.Context, string, *mongo.Database) error
+	if seeder != nil {
+		initialise = func(ctx context.Context, clientID string, db *mongo.Database) error {
+			if err := seeder(ctx, db); err != nil {
+				return err
+			}
+			logrus.Infof("Opened database %q for client %q", db.Name(), clientID)
+			return nil
+		}
+	}
+	return &Client{client: client, tenants: tenant.New(dbPrefix, open, initialise)}, nil
 }
 
 func (c *Client) MongoClient() *mongo.Client {
@@ -60,19 +57,7 @@ func (c *Client) Close(ctx context.Context) error {
 }
 
 func (c *Client) ForClient(clientID string) (*mongo.Database, error) {
-	if err := ValidateClientID(clientID); err != nil {
-		return nil, err
-	}
-	if v, ok := c.cache.Load(clientID); ok {
-		entry := v.(*tenantDB)
-		c.ensureSeeded(entry, clientID)
-		return entry.db, nil
-	}
-	entry := &tenantDB{db: c.client.Database(c.dbName(clientID))}
-	actual, _ := c.cache.LoadOrStore(clientID, entry)
-	entry = actual.(*tenantDB)
-	c.ensureSeeded(entry, clientID)
-	return entry.db, nil
+	return c.tenants.For(clientID)
 }
 
 func (c *Client) CollectionFromCtx(ctx context.Context, name string) (*mongo.Collection, error) {
@@ -87,44 +72,8 @@ func (c *Client) CollectionFromCtx(ctx context.Context, name string) (*mongo.Col
 	return db.Collection(name), nil
 }
 
-func (c *Client) dbName(clientID string) string {
-	if clientID == "000" {
-		return c.dbPrefix
-	}
-	return fmt.Sprintf("%s_%s", c.dbPrefix, clientID)
-}
-
-func (c *Client) ensureSeeded(t *tenantDB, clientID string) {
-	if c.seeder == nil {
-		return
-	}
-	if t.seeded.Load() {
-		return
-	}
-	t.seedMu.Lock()
-	defer t.seedMu.Unlock()
-	if t.seeded.Load() {
-		return
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-	logrus.Infof("Opened database %q for client %q", t.db.Name(), clientID)
-	if err := c.seeder(ctx, t.db); err != nil {
-		logrus.Warnf("tenant %q: seeder failed (will retry on next request): %v", clientID, err)
-		return
-	}
-	t.seeded.Store(true)
-}
-
-func ValidateClientID(clientID string) error {
-	if clientID == "" {
-		return errors.New("clientId is required")
-	}
-	if !validClientID.MatchString(clientID) {
-		return fmt.Errorf("invalid clientId %q", clientID)
-	}
-	return nil
-}
+// ValidateClientID refuses an empty or malformed client id.
+func ValidateClientID(clientID string) error { return tenant.ValidateClientID(clientID) }
 
 const (
 	CollectionBranches           = "branches"

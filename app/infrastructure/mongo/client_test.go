@@ -53,27 +53,6 @@ func TestValidateClientID(t *testing.T) {
 	}
 }
 
-func TestClient_dbName(t *testing.T) {
-	c := &Client{dbPrefix: "gold_shop"}
-
-	tests := []struct {
-		clientID string
-		want     string
-	}{
-		{"000", "gold_shop"},
-		{"abc", "gold_shop_abc"},
-		{"Shop-01", "gold_shop_Shop-01"},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.clientID, func(t *testing.T) {
-			if got := c.dbName(tc.clientID); got != tc.want {
-				t.Errorf("dbName(%q) = %q, want %q", tc.clientID, got, tc.want)
-			}
-		})
-	}
-}
-
 func TestClientIDFromCtx_Roundtrip(t *testing.T) {
 	ctx := WithClientID(context.Background(), "shop-42")
 
