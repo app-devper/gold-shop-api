@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-This is one subproject inside the `/Users/admin/ProjectPos` workspace — the workspace-level [`CLAUDE.md`](../../CLAUDE.md) covers cross-service rules (auth hub `um-api`, JWT/Redis session contract, role conventions, **no-code-comments rule**). Read this file together with that one.
+This is one of the app-devper repos (the Devper workspace). What the products share — UM as the identity service, Client isolation, role conventions, the `devperpos` deploy inventory — is written once in [agent-skills `workspace/CONTEXT-MAP.md`](https://github.com/app-devper/agent-skills/blob/main/workspace/CONTEXT-MAP.md); on this machine it is also pointed at by the always-loaded `~/.claude/rules/devper-workspace.md`. Read this file together with that map.
 
 ## Common commands
 
