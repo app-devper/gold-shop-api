@@ -23,7 +23,8 @@ type Service struct {
 	txManager    repository.TransactionManager
 }
 
-// NewService creates a new Sale service
+// NewService creates a new Sale service. It panics on a nil userRepo, so a
+// wiring mistake fails at startup instead of on the first receipt.
 func NewService(
 	saleRepo repository.SaleRepository,
 	productRepo repository.ProductRepository,
@@ -35,6 +36,9 @@ func NewService(
 	userRepo repository.UserRepository,
 	txManager repository.TransactionManager,
 ) *Service {
+	if userRepo == nil {
+		panic("sale.NewService: userRepo is required (receipts name the cashier)")
+	}
 	return &Service{
 		saleRepo:     saleRepo,
 		productRepo:  productRepo,
