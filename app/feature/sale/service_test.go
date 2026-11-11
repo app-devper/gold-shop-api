@@ -9,6 +9,8 @@ import (
 
 	"github.com/devper-gold/gold-shop-api/app/domain/entity"
 	"github.com/devper-gold/gold-shop-api/app/testutils"
+	"github.com/sirupsen/logrus"
+	logtest "github.com/sirupsen/logrus/hooks/test"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -215,13 +217,41 @@ func TestGenerateReceiptLeavesCashierEmptyWhenTheUserIsUnknown(t *testing.T) {
 	service := NewService(mockSaleRepo, nil, nil, nil, nil, nil, mockBranchRepo, mockUserRepo, new(testutils.MockTransactionManager))
 	mockSaleRepo.On("GetByID", ctx, saleID).Return(&entity.Sale{ID: saleID, BranchID: branchID, UserID: userID, SaleNumber: "S-002"}, nil)
 	mockBranchRepo.On("GetByID", ctx, branchID).Return(&entity.Branch{ID: branchID, Name: "Main"}, nil)
-	mockUserRepo.On("GetByID", ctx, userID).Return(nil, errors.New("not found"))
+	mockUserRepo.On("GetByID", ctx, userID).Return(nil, entity.ErrNotFound)
+	hook := logtest.NewGlobal()
+	defer hook.Reset()
 
 	receipt, err := service.GenerateReceipt(ctx, saleID)
 
 	assert.NoError(t, err)
 	assert.Equal(t, "", receipt.CashierName)
 	assert.Equal(t, "Main", receipt.BranchName)
+	assert.Empty(t, hook.AllEntries(), "an unknown cashier is expected and must not be logged as a failure")
+}
+
+func TestGenerateReceiptLogsACashierLookupThatFails(t *testing.T) {
+	ctx := context.Background()
+	saleID, branchID, userID := primitive.NewObjectID(), primitive.NewObjectID(), primitive.NewObjectID()
+	mockSaleRepo := new(testutils.MockSaleRepository)
+	mockBranchRepo := new(testutils.MockBranchRepository)
+	mockUserRepo := new(testutils.MockUserRepository)
+	service := NewService(mockSaleRepo, nil, nil, nil, nil, nil, mockBranchRepo, mockUserRepo, new(testutils.MockTransactionManager))
+	mockSaleRepo.On("GetByID", ctx, saleID).Return(&entity.Sale{ID: saleID, BranchID: branchID, UserID: userID, SaleNumber: "S-003"}, nil)
+	mockBranchRepo.On("GetByID", ctx, branchID).Return(&entity.Branch{ID: branchID, Name: "Main"}, nil)
+	mockUserRepo.On("GetByID", ctx, userID).Return(nil, errors.New("mongo: connection refused"))
+	hook := logtest.NewGlobal()
+	defer hook.Reset()
+
+	receipt, err := service.GenerateReceipt(ctx, saleID)
+
+	assert.NoError(t, err)
+	assert.Equal(t, "", receipt.CashierName)
+	if assert.Len(t, hook.AllEntries(), 1) {
+		entry := hook.LastEntry()
+		assert.Equal(t, logrus.WarnLevel, entry.Level)
+		assert.Contains(t, entry.Message, "cashier lookup failed")
+		assert.Contains(t, entry.Message, "connection refused")
+	}
 }
 
 func TestGetByBranchIDAttachesCustomerNames(t *testing.T) {
