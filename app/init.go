@@ -74,6 +74,7 @@ func (a App) StartApp() {
 	// Initialize repositories
 	branchRepo := mongo.NewBranchRepository(mongoClient)
 	employeeRepo := mongo.NewEmployeeRepository(mongoClient)
+	userRepo := mongo.NewUserRepository(mongoClient)
 	customerRepo := mongo.NewCustomerRepository(mongoClient)
 	productRepo := mongo.NewProductRepository(mongoClient)
 	saleRepo := mongo.NewSaleRepository(mongoClient)
@@ -92,7 +93,7 @@ func (a App) StartApp() {
 	employeeService := employee.NewService(employeeRepo, branchRepo)
 	branchService := branch.NewService(branchRepo)
 	txManager := mongo.NewTransactionManager(mongoClient)
-	saleService := sale.NewService(saleRepo, productRepo, productItemRepo, goldPriceRepo, stockLogRepo, customerRepo, branchRepo, nil, txManager)
+	saleService := sale.NewService(saleRepo, productRepo, productItemRepo, goldPriceRepo, stockLogRepo, customerRepo, branchRepo, userRepo, txManager)
 	pawnService := pawn.NewService(pawnRepo, branchRepo, customerRepo)
 	goldPriceService := gold_price_app.NewService(goldPriceRepo, goldAPIClient)
 	goldSavingService := gold_saving.NewService(goldSavingRepo, goldPriceRepo, branchRepo, customerRepo)

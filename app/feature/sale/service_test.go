@@ -2,10 +2,15 @@ package sale
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/devper-gold/gold-shop-api/app/domain/entity"
 	"github.com/devper-gold/gold-shop-api/app/testutils"
+	"github.com/sirupsen/logrus"
+	logtest "github.com/sirupsen/logrus/hooks/test"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -136,7 +141,7 @@ func TestCreateSale(t *testing.T) {
 		mockProductRepo := new(testutils.MockProductRepository)
 		mockBranchRepo := new(testutils.MockBranchRepository)
 		mockPriceRepo := new(testutils.MockGoldPriceRepository)
-		service := NewService(nil, mockProductRepo, nil, mockPriceRepo, nil, nil, mockBranchRepo, nil, new(testutils.MockTransactionManager))
+		service := NewService(nil, mockProductRepo, nil, mockPriceRepo, nil, nil, mockBranchRepo, new(testutils.MockUserRepository), new(testutils.MockTransactionManager))
 
 		mockBranchRepo.On("GetByID", ctx, branchID).Return(&entity.Branch{ID: branchID, Code: "B"}, nil)
 		mockPriceRepo.On("GetCurrent", ctx).Return(&entity.GoldPrice{GoldBarBuy: 30000, GoldBarSell: 31000, GoldOrnamentBuy: 29000, GoldOrnamentSell: 30500}, nil)
@@ -156,7 +161,7 @@ func TestCreateSale(t *testing.T) {
 	t.Run("BranchNotFound", func(t *testing.T) {
 		branchID := primitive.NewObjectID()
 		mockBranchRepo := new(testutils.MockBranchRepository)
-		service := NewService(nil, nil, nil, nil, nil, nil, mockBranchRepo, nil, new(testutils.MockTransactionManager))
+		service := NewService(nil, nil, nil, nil, nil, nil, mockBranchRepo, new(testutils.MockUserRepository), new(testutils.MockTransactionManager))
 
 		mockBranchRepo.On("GetByID", ctx, branchID).Return(nil, nil).Once()
 		_, err := service.Create(ctx, CreateSaleInput{BranchID: branchID})
@@ -190,6 +195,65 @@ func TestGenerateReceipt(t *testing.T) {
 	assert.Equal(t, "John", receipt.CashierName)
 }
 
+func TestNewServiceRefusesANilUserRepo(t *testing.T) {
+	defer func() {
+		r := recover()
+		if r == nil {
+			t.Fatal("NewService accepted a nil userRepo; the first receipt would panic instead")
+		}
+		if !strings.Contains(fmt.Sprint(r), "userRepo is required") {
+			t.Fatalf("unexpected panic: %v", r)
+		}
+	}()
+	NewService(new(testutils.MockSaleRepository), nil, nil, nil, nil, nil, new(testutils.MockBranchRepository), nil, new(testutils.MockTransactionManager))
+}
+
+func TestGenerateReceiptLeavesCashierEmptyWhenTheUserIsUnknown(t *testing.T) {
+	ctx := context.Background()
+	saleID, branchID, userID := primitive.NewObjectID(), primitive.NewObjectID(), primitive.NewObjectID()
+	mockSaleRepo := new(testutils.MockSaleRepository)
+	mockBranchRepo := new(testutils.MockBranchRepository)
+	mockUserRepo := new(testutils.MockUserRepository)
+	service := NewService(mockSaleRepo, nil, nil, nil, nil, nil, mockBranchRepo, mockUserRepo, new(testutils.MockTransactionManager))
+	mockSaleRepo.On("GetByID", ctx, saleID).Return(&entity.Sale{ID: saleID, BranchID: branchID, UserID: userID, SaleNumber: "S-002"}, nil)
+	mockBranchRepo.On("GetByID", ctx, branchID).Return(&entity.Branch{ID: branchID, Name: "Main"}, nil)
+	mockUserRepo.On("GetByID", ctx, userID).Return(nil, entity.ErrNotFound)
+	hook := logtest.NewGlobal()
+	defer hook.Reset()
+
+	receipt, err := service.GenerateReceipt(ctx, saleID)
+
+	assert.NoError(t, err)
+	assert.Equal(t, "", receipt.CashierName)
+	assert.Equal(t, "Main", receipt.BranchName)
+	assert.Empty(t, hook.AllEntries(), "an unknown cashier is expected and must not be logged as a failure")
+}
+
+func TestGenerateReceiptLogsACashierLookupThatFails(t *testing.T) {
+	ctx := context.Background()
+	saleID, branchID, userID := primitive.NewObjectID(), primitive.NewObjectID(), primitive.NewObjectID()
+	mockSaleRepo := new(testutils.MockSaleRepository)
+	mockBranchRepo := new(testutils.MockBranchRepository)
+	mockUserRepo := new(testutils.MockUserRepository)
+	service := NewService(mockSaleRepo, nil, nil, nil, nil, nil, mockBranchRepo, mockUserRepo, new(testutils.MockTransactionManager))
+	mockSaleRepo.On("GetByID", ctx, saleID).Return(&entity.Sale{ID: saleID, BranchID: branchID, UserID: userID, SaleNumber: "S-003"}, nil)
+	mockBranchRepo.On("GetByID", ctx, branchID).Return(&entity.Branch{ID: branchID, Name: "Main"}, nil)
+	mockUserRepo.On("GetByID", ctx, userID).Return(nil, errors.New("mongo: connection refused"))
+	hook := logtest.NewGlobal()
+	defer hook.Reset()
+
+	receipt, err := service.GenerateReceipt(ctx, saleID)
+
+	assert.NoError(t, err)
+	assert.Equal(t, "", receipt.CashierName)
+	if assert.Len(t, hook.AllEntries(), 1) {
+		entry := hook.LastEntry()
+		assert.Equal(t, logrus.WarnLevel, entry.Level)
+		assert.Contains(t, entry.Message, "cashier lookup failed")
+		assert.Contains(t, entry.Message, "connection refused")
+	}
+}
+
 func TestGetByBranchIDAttachesCustomerNames(t *testing.T) {
 	ctx := context.Background()
 	branchID := primitive.NewObjectID()
@@ -197,7 +261,7 @@ func TestGetByBranchIDAttachesCustomerNames(t *testing.T) {
 
 	mockSaleRepo := new(testutils.MockSaleRepository)
 	mockCustomerRepo := new(testutils.MockCustomerRepository)
-	service := NewService(mockSaleRepo, nil, nil, nil, nil, mockCustomerRepo, nil, nil, nil)
+	service := NewService(mockSaleRepo, nil, nil, nil, nil, mockCustomerRepo, nil, new(testutils.MockUserRepository), nil)
 
 	sales := []*entity.Sale{
 		{ID: primitive.NewObjectID(), CustomerID: &customerID},
@@ -222,7 +286,7 @@ func TestGetByBranchIDSkipsLookupWhenNoCustomers(t *testing.T) {
 
 	mockSaleRepo := new(testutils.MockSaleRepository)
 	mockCustomerRepo := new(testutils.MockCustomerRepository)
-	service := NewService(mockSaleRepo, nil, nil, nil, nil, mockCustomerRepo, nil, nil, nil)
+	service := NewService(mockSaleRepo, nil, nil, nil, nil, mockCustomerRepo, nil, new(testutils.MockUserRepository), nil)
 
 	sales := []*entity.Sale{{ID: primitive.NewObjectID()}}
 	mockSaleRepo.On("GetByBranchID", ctx, branchID, []entity.SaleStatus(nil), 20, 0).Return(sales, nil)
@@ -241,7 +305,7 @@ func TestGetUnpaidSalesAttachesCustomerNames(t *testing.T) {
 
 	mockSaleRepo := new(testutils.MockSaleRepository)
 	mockCustomerRepo := new(testutils.MockCustomerRepository)
-	service := NewService(mockSaleRepo, nil, nil, nil, nil, mockCustomerRepo, nil, nil, nil)
+	service := NewService(mockSaleRepo, nil, nil, nil, nil, mockCustomerRepo, nil, new(testutils.MockUserRepository), nil)
 
 	sales := []*entity.Sale{{ID: primitive.NewObjectID(), CustomerID: &customerID}}
 	mockSaleRepo.On("GetUnpaidByBranchID", ctx, branchID).Return(sales, nil)
@@ -262,7 +326,7 @@ func TestGetByIDAttachesCustomerName(t *testing.T) {
 
 	mockSaleRepo := new(testutils.MockSaleRepository)
 	mockCustomerRepo := new(testutils.MockCustomerRepository)
-	service := NewService(mockSaleRepo, nil, nil, nil, nil, mockCustomerRepo, nil, nil, nil)
+	service := NewService(mockSaleRepo, nil, nil, nil, nil, mockCustomerRepo, nil, new(testutils.MockUserRepository), nil)
 
 	mockSaleRepo.On("GetByID", ctx, saleID).Return(&entity.Sale{ID: saleID, CustomerID: &customerID}, nil)
 	mockCustomerRepo.On("GetNamesByIDs", ctx, []primitive.ObjectID{customerID}).Return(map[primitive.ObjectID]string{
