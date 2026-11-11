@@ -7,6 +7,7 @@ import (
 	"github.com/devper-gold/gold-shop-api/app/domain/entity"
 	"github.com/devper-gold/gold-shop-api/app/domain/repository"
 	"github.com/devper-gold/gold-shop-api/app/feature/pricing"
+	"github.com/sirupsen/logrus"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
@@ -23,7 +24,8 @@ type Service struct {
 	txManager    repository.TransactionManager
 }
 
-// NewService creates a new Sale service
+// NewService creates a new Sale service. It panics on a nil userRepo, so a
+// wiring mistake fails at startup instead of on the first receipt.
 func NewService(
 	saleRepo repository.SaleRepository,
 	productRepo repository.ProductRepository,
@@ -35,6 +37,9 @@ func NewService(
 	userRepo repository.UserRepository,
 	txManager repository.TransactionManager,
 ) *Service {
+	if userRepo == nil {
+		panic("sale.NewService: userRepo is required (receipts name the cashier)")
+	}
 	return &Service{
 		saleRepo:     saleRepo,
 		productRepo:  productRepo,
@@ -501,8 +506,14 @@ func (s *Service) GenerateReceipt(ctx context.Context, saleID primitive.ObjectID
 		branchName = branch.Name
 	}
 
+	// The cashier is looked up in the local users collection. A cashier who is
+	// not there is expected (identity lives in UM) and leaves the name empty;
+	// any other failure is logged so it is not mistaken for that case.
 	cashierName := ""
-	user, _ := s.userRepo.GetByID(ctx, sale.UserID)
+	user, err := s.userRepo.GetByID(ctx, sale.UserID)
+	if err != nil && !errors.Is(err, entity.ErrNotFound) {
+		logrus.Warnf("receipt %s: cashier lookup failed: %v", sale.SaleNumber, err)
+	}
 	if user != nil {
 		cashierName = user.FullName
 	}
